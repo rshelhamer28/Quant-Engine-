@@ -29,6 +29,20 @@ from collections import defaultdict
 from logging.handlers import RotatingFileHandler
 import re
 
+# Global request throttling to prevent Yahoo Finance rate limiting
+_last_yfinance_request_time = 0
+_request_throttle_seconds = 1.0  # Minimum 1 second between any yfinance requests
+
+def throttle_yfinance_request():
+    """Enforce global throttling across all yfinance requests"""
+    global _last_yfinance_request_time
+    now = time.time()
+    elapsed = now - _last_yfinance_request_time
+    if elapsed < _request_throttle_seconds:
+        wait_time = _request_throttle_seconds - elapsed
+        time.sleep(wait_time)
+    _last_yfinance_request_time = time.time()
+
 # Load environment variables from .env file
 load_dotenv()
 # Import authentication and session management (Phase 2 Multi-User)
@@ -1824,7 +1838,7 @@ def _validate_numeric_value(
         logger.warning(f"Cannot convert {name}={value} to float")
         return None
 
-def get_fundamental_data(ticker, max_retries=5, initial_backoff=0.5):
+def get_fundamental_data(ticker, max_retries=7, initial_backoff=2.0):
     """Robust fundamental data fetching with aggressive retry logic for ANY US stock/ETF/index"""
     import random
     
@@ -1849,13 +1863,18 @@ def get_fundamental_data(ticker, max_retries=5, initial_backoff=0.5):
         'partial_data': False
     }
     
-    # Step 1: AGGRESSIVE RETRY - Try to fetch from yfinance multiple times with long backoff
+    # Step 1: AGGRESSIVE RETRY - Try to fetch from yfinance multiple times with exponential backoff
     info = None
     last_error = None
     
     for attempt in range(max_retries):
         try:
             logger.info(f"Fetching fundamental data for {ticker} (attempt {attempt + 1}/{max_retries})")
+            
+            # Enforce global throttling to prevent hammering Yahoo Finance
+            throttle_yfinance_request()
+            
+            # Simple direct call - no session parameter complexity
             stock = yf.Ticker(ticker)
             info = stock.info
             
@@ -1867,17 +1886,17 @@ def get_fundamental_data(ticker, max_retries=5, initial_backoff=0.5):
         except Exception as e:
             last_error = e
             error_str = str(e).lower()
-            is_rate_limit = 'rate' in error_str or 'too many' in error_str or '429' in error_str
+            is_rate_limit = 'rate' in error_str or 'too many' in error_str or '429' in error_str or 'crumb' in error_str or '401' in error_str
             
             if is_rate_limit and attempt < max_retries - 1:
-                # Exponential backoff with jitter for rate limits
-                # More aggressive: 0.5s → 1.5s → 4.5s → 13.5s → 40.5s
-                backoff_time = initial_backoff * (3 ** attempt) + random.uniform(0, 2)
+                # MUCH MORE AGGRESSIVE backoff for rate limits
+                # Yahoo Finance needs LONG waits: 2s → 4s → 8s → 16s → 32s → 64s → 128s
+                backoff_time = initial_backoff * (2 ** attempt) + random.uniform(0, 3)
                 logger.warning(f"Rate limit on attempt {attempt + 1} for {ticker}. Retrying in {backoff_time:.1f}s...")
                 time.sleep(backoff_time)
             elif attempt < max_retries - 1:
                 # Non-rate-limit error, still retry with shorter backoff
-                backoff_time = 0.5 + random.uniform(0, 1)
+                backoff_time = 1.0 + random.uniform(0, 2)
                 logger.debug(f"Error on attempt {attempt + 1} for {ticker}: {str(e)[:80]}. Retrying in {backoff_time:.1f}s...")
                 time.sleep(backoff_time)
             else:
