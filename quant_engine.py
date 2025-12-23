@@ -34,8 +34,8 @@ load_dotenv()
 # Import authentication and session management (Phase 2 Multi-User)
 try:
     from auth_manager import auth_manager
-    from session_manager import session_manager
-    from quota_manager import quota_manager
+    from session_manager import session_manager  # type: ignore
+    from quota_manager import quota_manager  # type: ignore
 except ImportError:
     print("Warning: Authentication modules not found. Running in Phase 1 mode (limited concurrent users).")
     auth_manager = None
@@ -45,7 +45,7 @@ except ImportError:
 # Import backup and monitoring systems
 try:
     from backup_manager import backup_manager
-    from monitoring import monitor, RequestTimer
+    from monitoring import monitor, RequestTimer  # type: ignore
 except ImportError:
     print("Warning: Backup/monitoring modules not found. Running without backup/monitoring features.")
     backup_manager = None
@@ -2099,6 +2099,46 @@ def get_fundamental_data(ticker, max_retries=5, initial_backoff=0.3):
     # Step 3: Final fallback - when ALL retries exhausted
     logger.warning(f"Using fallback for {ticker} after all retries exhausted")
     
+    # Try one more time to get at least pe_ratio from yfinance before giving up
+    try:
+        stock = yf.Ticker(ticker)
+        info = stock.info
+        if info:
+            # Try to extract at least pe_ratio
+            pe_ratio = _coerce_to_float(info.get('trailingPE') or info.get('forwardPE'))
+            if pe_ratio:
+                result['pe_ratio'] = pe_ratio
+            # Try dividend yield
+            dividend_yield = _coerce_to_float(info.get('dividendYield'))
+            if dividend_yield and dividend_yield < 1:
+                dividend_yield = dividend_yield * 100
+            if dividend_yield:
+                result['dividend_yield'] = dividend_yield
+            # Try EV/EBITDA
+            ev_ebitda = _coerce_to_float(info.get('enterpriseToEbitda'))
+            if ev_ebitda:
+                result['ev_ebitda'] = ev_ebitda
+            # Try target price
+            target_price = _coerce_to_float(
+                info.get('targetMeanPrice') or
+                info.get('targetHighPrice') or
+                info.get('targetMedianPrice')
+            )
+            if target_price:
+                result['target_price'] = target_price
+            # Try current price
+            current_price = None
+            price_fields = ['currentPrice', 'regularMarketPrice', 'previousClose', 'bid', 'ask']
+            for field in price_fields:
+                if field in info and info[field] is not None:
+                    current_price = _coerce_to_float(info[field])
+                    if current_price is not None:
+                        break
+            if current_price:
+                result['current_price'] = current_price
+    except Exception as fallback_e:
+        logger.warning(f"Fallback fundamental extraction also failed for {ticker}: {str(fallback_e)[:50]}")
+    
     # Try to infer sector from ticker if we have price data
     ticker_sector_map = {
         'MSFT': 'Technology', 'AAPL': 'Technology', 'GOOGL': 'Technology', 'AMZN': 'Consumer Cyclical',
@@ -4116,6 +4156,20 @@ st.caption("Comprehensive analysis for stocks, ETFs, and index funds")
 # Display session info in sidebar (helpful for debugging)
 show_session_info()
 
+# Hide blue boxes behind input parameters
+st.markdown("""
+<style>
+    .stTextInput > div:first-child,
+    .stNumberInput > div:first-child,
+    .stSlider > div:first-child,
+    .stButton > button {
+        background-color: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 # --- INPUT SECTION ---
 with st.container():
     st.markdown("""
@@ -6022,8 +6076,8 @@ if analyze_btn:
                 
                 # Determine forecast direction
                 if mc_results and 'median_final' in mc_results:
-                    forecast_upside = ((mc_results['median_final'] - current_price) / current_price) * 100
-                    if forecast_upside > 5:
+                    forecast_upside = ((mc_results['median_final'] - current_price) / current_price) * 100 if current_price else None
+                    if forecast_upside and forecast_upside > 5:
                         forecast_dir = f"+{forecast_upside:.1f}%"
                         forecast_color = COLOR_POSITIVE
                     elif forecast_upside < -5:
@@ -6180,7 +6234,7 @@ if analyze_btn:
                 
                 with timeline_col3:
                     # Return potential spectrum (Monte Carlo upside/downside)
-                    if mc_results and 'median_final' in mc_results:
+                    if mc_results and 'median_final' in mc_results and current_price:
                         upside = ((mc_results['ci_95_upper'] - current_price) / current_price) * 100
                         downside = ((mc_results['ci_95_lower'] - current_price) / current_price) * 100
                         median_return = ((mc_results['median_final'] - current_price) / current_price) * 100
@@ -6216,7 +6270,7 @@ if analyze_btn:
                         """, unsafe_allow_html=True)
                 
                 # ===== KEY TAKEAWAYS FROM MONTE CARLO =====
-                if mc_results and 'median_final' in mc_results:
+                if mc_results and 'median_final' in mc_results and current_price:
                     st.markdown(f'<div class="subsection-header">Scenario Analysis ({forecast_years}-Year Forecast)</div>', unsafe_allow_html=True)
                     
                     upside_pct = ((mc_results['ci_95_upper'] - current_price) / current_price) * 100
