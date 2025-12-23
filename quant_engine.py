@@ -4116,16 +4116,16 @@ st.caption("Comprehensive analysis for stocks, ETFs, and index funds")
 # Display session info in sidebar (helpful for debugging)
 show_session_info()
 
-# --- STYLE INPUT WIDGETS ---
+# --- STYLE PARAMETER BOXES ---
 st.markdown("""
 <style>
-    /* Make input widget boxes black/transparent */
-    .stTextInput > div > div > input,
-    .stNumberInput > div > div > input,
-    .stSlider > div,
-    .stButton > button {
-        background-color: #000000 !important;
-        border: 1px solid #000000 !important;
+    /* Style the container boxes behind the input widgets to be black/transparent */
+    .stTextInput,
+    .stNumberInput,
+    .stSlider,
+    .stButton {
+        background-color: transparent !important;
+        border: 1px solid rgba(0, 180, 216, 0.1) !important;
     }
 </style>
 """, unsafe_allow_html=True)
