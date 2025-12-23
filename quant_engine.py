@@ -4116,20 +4116,6 @@ st.caption("Comprehensive analysis for stocks, ETFs, and index funds")
 # Display session info in sidebar (helpful for debugging)
 show_session_info()
 
-# --- STYLE PARAMETER BOXES ---
-st.markdown("""
-<style>
-    /* Style the container boxes behind the input widgets to be black/transparent */
-    .stTextInput,
-    .stNumberInput,
-    .stSlider,
-    .stButton {
-        background-color: transparent !important;
-        border: 1px solid rgba(0, 180, 216, 0.1) !important;
-    }
-</style>
-""", unsafe_allow_html=True)
-
 # --- INPUT SECTION ---
 with st.container():
     st.markdown("""
@@ -5172,7 +5158,8 @@ if analyze_btn:
                     median_final = mc_results['median_final']
                     mean_final = mc_results['mean_final']
                     prob_profit = mc_results['prob_positive_return']
-                    upside_pct = ((median_final - current_price) / current_price) * 100
+                    # Calculate upside only if current_price is available
+                    upside_pct = ((median_final - current_price) / current_price) * 100 if current_price else None
                     expected_return = mc_results['median_annual_return']  # Use median return for consistency with median forecast
                     
                     # Get colors based on values
