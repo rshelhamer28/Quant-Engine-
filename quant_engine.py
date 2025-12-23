@@ -4182,9 +4182,18 @@ st.markdown("""
     [data-testid="stVerticalBlockBorderWrapper"],
     [data-testid="column"],
     [data-testid="column"] > div,
+    [data-testid="column"] > div > div,
+    [data-testid="column"] > div > div > div,
     [data-testid="stElementContainer"],
+    [data-testid="stElementToolbar"],
+    [data-testid="StyledFullScreenFrame"],
     .stTextInput, .stNumberInput, .stSlider, .stButton,
-    .element-container, .block-container {
+    .element-container, .block-container,
+    .stColumn > div,
+    .stColumn > div > div,
+    section[data-testid="stSidebar"] > div,
+    div.stMarkdown,
+    div.stCaption {
         background-color: transparent !important;
         border: none !important;
         box-shadow: none !important;
@@ -4192,7 +4201,18 @@ st.markdown("""
     /* Target the blue wrapper divs specifically */
     [data-testid="stVerticalBlockBorderWrapper"] > div,
     [data-testid="stVerticalBlock"] > div,
-    div[data-testid="stVerticalBlockBorderWrapper"] {
+    div[data-testid="stVerticalBlockBorderWrapper"],
+    div[data-testid="stVerticalBlockBorderWrapper"] > div > div,
+    /* Target column containers explicitly */
+    .st-emotion-cache-1r6slb0,
+    .st-emotion-cache-1kyxreq,
+    .st-emotion-cache-12w0qpk,
+    .st-emotion-cache-ocqkz7,
+    .st-emotion-cache-16idsys,
+    .st-emotion-cache-1v0mbdj,
+    .st-emotion-cache-1wmy9hl,
+    div[data-testid="column"] > div:first-child,
+    div[data-testid="stHorizontalBlock"] > div {
         background-color: transparent !important;
         border: none !important;
         box-shadow: none !important;
@@ -4207,24 +4227,46 @@ st.markdown("""
     .stTextInput > div > div {
         background-color: transparent !important;
     }
-    /* Number input +/- buttons - make them match input text color (black/dark) */
+    /* Number input - unified box styling */
+    [data-testid="stNumberInput"],
+    [data-testid="stNumberInput"] > div,
+    [data-testid="stNumberInput"] > div > div,
+    .stNumberInput,
+    .stNumberInput > div,
+    .stNumberInput > div > div {
+        background-color: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+    }
+    /* Number input +/- buttons - same color as text */
     [data-testid="stNumberInput"] button,
     .stNumberInput button,
     [data-testid="stNumberInput-StepUp"],
-    [data-testid="stNumberInput-StepDown"] {
+    [data-testid="stNumberInput-StepDown"],
+    button[kind="secondary"] {
         background-color: transparent !important;
         border: none !important;
+        box-shadow: none !important;
         color: #FFFFFF !important;
     }
     [data-testid="stNumberInput"] button svg,
-    .stNumberInput button svg {
+    .stNumberInput button svg,
+    [data-testid="stNumberInput-StepUp"] svg,
+    [data-testid="stNumberInput-StepDown"] svg {
         fill: #FFFFFF !important;
         stroke: #FFFFFF !important;
+        color: #FFFFFF !important;
     }
-    /* Ensure step buttons are inline with the input */
+    /* Number input wrapper - keep everything inline */
     [data-testid="stNumberInput"] > div {
         display: flex !important;
         align-items: center !important;
+        gap: 0 !important;
+    }
+    /* Remove any separator/divider styling on step buttons */
+    [data-testid="stNumberInput"] button::before,
+    [data-testid="stNumberInput"] button::after {
+        display: none !important;
     }
     /* Remove border from container around inputs */
     .stTextInput > div:first-child,
@@ -4837,33 +4879,19 @@ if analyze_btn:
                 
                 # Display metrics with styled grid (similar to Forecast Overview)
                 if len(metrics_data) > 0:
-                    # Build grid items HTML
-                    grid_items_html = ""
-                    for label, value, raw_val, color, tooltip in metrics_data:
-                        grid_items_html += f"""
-                            <div>
-                                <div style="color: {COLOR_SECONDARY_TEXT}; font-size: 0.9rem; margin-bottom: 0.5rem; font-weight: 500;">
-                                    <span class="metric-tooltip">
-                                        {label}
-                                        <span class="tooltip-icon">ℹ</span>
-                                        <span class="tooltip-text">{tooltip}</span>
-                                    </span>
-                                </div>
-                                <div style="color: {color}; font-size: 1.8rem; font-weight: 700;">{value}</div>
-                            </div>
-                        """
-                    
                     # Calculate grid columns based on number of metrics
                     n_cols = min(len(metrics_data), 4)
                     grid_template = ' '.join(['1fr'] * n_cols)
                     
-                    st.markdown(f"""
-                    <div style="background: linear-gradient(135deg, {COLOR_BG_CARD} 0%, rgba(0, 180, 216, 0.08) 100%); padding: 1.5rem; border-radius: 10px; border: 1px solid rgba(0, 180, 216, 0.3); margin-bottom: 1.5rem;">
-                        <div style="display: grid; grid-template-columns: {grid_template}; gap: 2rem; text-align: center;">
-                            {grid_items_html}
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
+                    # Build complete HTML in one string
+                    valuation_html = f'''<div style="background: linear-gradient(135deg, {COLOR_BG_CARD} 0%, rgba(0, 180, 216, 0.08) 100%); padding: 1.5rem; border-radius: 10px; border: 1px solid rgba(0, 180, 216, 0.3); margin-bottom: 1.5rem;"><div style="display: grid; grid-template-columns: {grid_template}; gap: 2rem; text-align: center;">'''
+                    
+                    for label, value, raw_val, color, tooltip in metrics_data:
+                        valuation_html += f'''<div><div style="color: {COLOR_SECONDARY_TEXT}; font-size: 0.9rem; margin-bottom: 0.5rem; font-weight: 500;"><span class="metric-tooltip">{label}<span class="tooltip-icon">ℹ</span><span class="tooltip-text">{tooltip}</span></span></div><div style="color: {color}; font-size: 1.8rem; font-weight: 700;">{value}</div></div>'''
+                    
+                    valuation_html += '''</div></div>'''
+                    
+                    st.markdown(valuation_html, unsafe_allow_html=True)
                 else:
                     st.info("📊 Valuation metrics not currently available for this ticker.")
                 
