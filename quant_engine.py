@@ -4227,81 +4227,57 @@ st.markdown("""
     .stTextInput > div > div {
         background-color: transparent !important;
     }
-    /* Number input - unified box styling - remove ALL backgrounds */
-    [data-testid="stNumberInput"],
-    [data-testid="stNumberInput"] > div,
+    
+    /* ========== NUMBER INPUT - UNIFIED WHITE BOX ========== */
+    /* The main wrapper gets the white background - contains input + buttons */
     [data-testid="stNumberInput"] > div > div,
-    [data-testid="stNumberInput"] > div > div > div,
-    .stNumberInput,
-    .stNumberInput > div,
-    .stNumberInput > div > div,
-    .stNumberInput > div > div > div {
-        background-color: transparent !important;
-        background: none !important;
-        border: none !important;
-        box-shadow: none !important;
+    .stNumberInput > div > div {
+        background-color: #FFFFFF !important;
+        background: #FFFFFF !important;
+        border: 1px solid #CCCCCC !important;
+        border-radius: 6px !important;
+        padding: 2px 4px !important;
     }
-    /* Number input +/- buttons - BLACK color, NO background box */
-    [data-testid="stNumberInput"] button,
-    .stNumberInput button,
-    [data-testid="stNumberInput-StepUp"],
-    [data-testid="stNumberInput-StepDown"],
-    button[kind="secondary"],
-    [data-testid="stNumberInput"] button[kind="secondary"],
-    [data-testid="stNumberInput"] > div > div > button {
+    /* Remove backgrounds from inner elements */
+    [data-testid="stNumberInput"] > div > div *,
+    .stNumberInput > div > div * {
         background-color: transparent !important;
-        background: none !important;
+        background: transparent !important;
+    }
+    /* Input field styling - no border since wrapper has it */
+    [data-testid="stNumberInput"] input,
+    .stNumberInput input {
+        background-color: transparent !important;
+        background: transparent !important;
+        border: none !important;
+        color: #000000 !important;
+        padding: 6px 8px !important;
+    }
+    /* +/- buttons - BLACK color since they're in white box */
+    [data-testid="stNumberInput"] button,
+    .stNumberInput button {
+        background-color: transparent !important;
+        background: transparent !important;
         border: none !important;
         box-shadow: none !important;
         color: #000000 !important;
-        padding: 0 4px !important;
-    }
-    /* Button parent containers - remove dark box */
-    [data-testid="stNumberInput"] > div > div:has(button),
-    [data-testid="stNumberInput"] button:parent,
-    .stNumberInput > div > div:last-child,
-    .stNumberInput > div > div:first-child {
-        background-color: transparent !important;
-        background: none !important;
-        border: none !important;
-        box-shadow: none !important;
     }
     [data-testid="stNumberInput"] button svg,
-    .stNumberInput button svg,
-    [data-testid="stNumberInput-StepUp"] svg,
-    [data-testid="stNumberInput-StepDown"] svg {
+    .stNumberInput button svg {
         fill: #000000 !important;
         stroke: #000000 !important;
         color: #000000 !important;
     }
-    /* Number input wrapper - keep everything inline as ONE box */
-    [data-testid="stNumberInput"] > div,
-    .stNumberInput > div {
-        display: flex !important;
-        align-items: center !important;
-        gap: 0 !important;
-        background: none !important;
-        background-color: transparent !important;
-    }
-    /* Target the actual input field only */
-    [data-testid="stNumberInput"] input,
-    .stNumberInput input {
-        background-color: rgba(255, 255, 255, 0.95) !important;
-        border: 1px solid rgba(255, 255, 255, 0.3) !important;
-        border-radius: 4px !important;
-        color: #000000 !important;
-    }
-    /* Remove any separator/divider styling on step buttons */
+    /* Remove any pseudo-elements */
     [data-testid="stNumberInput"] button::before,
-    [data-testid="stNumberInput"] button::after {
+    [data-testid="stNumberInput"] button::after,
+    .stNumberInput button::before,
+    .stNumberInput button::after {
         display: none !important;
+        background: transparent !important;
     }
-    /* Hide the step button container backgrounds completely */
-    [data-testid="stNumberInput"] [data-baseweb="input"] + div,
-    [data-testid="stNumberInput"] [data-baseweb="base-input"] ~ div {
-        background: none !important;
-        background-color: transparent !important;
-    }
+    /* ========== END NUMBER INPUT FIX ========== */
+    
     /* Remove border from container around inputs */
     .stTextInput > div:first-child,
     .stNumberInput > div:first-child,
