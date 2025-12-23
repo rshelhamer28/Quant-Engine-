@@ -4228,32 +4228,38 @@ st.markdown("""
         background-color: transparent !important;
     }
     
-    /* ========== NUMBER INPUT - UNIFIED WHITE BOX ========== */
-    /* The main wrapper gets the white background - contains input + buttons */
+    /* ========== NUMBER INPUT - SINGLE UNIFIED WHITE BOX ========== */
+    /* Remove ALL backgrounds first */
+    [data-testid="stNumberInput"],
+    [data-testid="stNumberInput"] > div,
     [data-testid="stNumberInput"] > div > div,
-    .stNumberInput > div > div {
+    [data-testid="stNumberInput"] > div > div > div,
+    .stNumberInput,
+    .stNumberInput > div,
+    .stNumberInput > div > div,
+    .stNumberInput > div > div > div {
+        background-color: transparent !important;
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+    }
+    /* The baseweb input container - THIS is the one unified box */
+    [data-testid="stNumberInput"] [data-baseweb="input"],
+    .stNumberInput [data-baseweb="input"] {
         background-color: #FFFFFF !important;
         background: #FFFFFF !important;
         border: 1px solid #CCCCCC !important;
         border-radius: 6px !important;
-        padding: 2px 4px !important;
     }
-    /* Remove backgrounds from inner elements */
-    [data-testid="stNumberInput"] > div > div *,
-    .stNumberInput > div > div * {
-        background-color: transparent !important;
-        background: transparent !important;
-    }
-    /* Input field styling - no border since wrapper has it */
+    /* Input field styling */
     [data-testid="stNumberInput"] input,
     .stNumberInput input {
         background-color: transparent !important;
         background: transparent !important;
         border: none !important;
         color: #000000 !important;
-        padding: 6px 8px !important;
     }
-    /* +/- buttons - BLACK color since they're in white box */
+    /* +/- buttons - same color as number, not bold */
     [data-testid="stNumberInput"] button,
     .stNumberInput button {
         background-color: transparent !important;
@@ -4261,12 +4267,14 @@ st.markdown("""
         border: none !important;
         box-shadow: none !important;
         color: #000000 !important;
+        font-weight: normal !important;
     }
     [data-testid="stNumberInput"] button svg,
     .stNumberInput button svg {
         fill: #000000 !important;
         stroke: #000000 !important;
         color: #000000 !important;
+        stroke-width: 1px !important;
     }
     /* Remove any pseudo-elements */
     [data-testid="stNumberInput"] button::before,
