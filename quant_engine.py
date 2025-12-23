@@ -2027,6 +2027,12 @@ def get_fundamental_data(ticker, max_retries=5, initial_backoff=0.3):
             # Market cap with display formatting
             market_cap = _coerce_to_float(info.get('marketCap'))
             result['market_cap'] = market_cap
+            
+            # Try alternative field if marketCap not available
+            if not market_cap:
+                market_cap = _coerce_to_float(info.get('market_cap')) or _coerce_to_float(info.get('marketCapitalization'))
+                result['market_cap'] = market_cap
+            
             if market_cap:
                 if market_cap >= 1e12:
                     result['market_cap_display'] = f"${market_cap/1e12:.2f}T"
@@ -2036,6 +2042,10 @@ def get_fundamental_data(ticker, max_retries=5, initial_backoff=0.3):
                     result['market_cap_display'] = f"${market_cap/1e6:.2f}M"
                 else:
                     result['market_cap_display'] = f"${market_cap:,.0f}"
+            else:
+                # If no market cap from API, set to N/A
+                result['market_cap_display'] = 'N/A'
+                logger.debug(f"No market cap found for {ticker} from yfinance")
             
             # Extract sector and industry from API response (PRIMARY SOURCE)
             sector = info.get('sector')
@@ -4102,6 +4112,20 @@ st.caption("Comprehensive analysis for stocks, ETFs, and index funds")
 # Display session info in sidebar (helpful for debugging)
 show_session_info()
 
+# --- STYLE INPUT WIDGETS ---
+st.markdown("""
+<style>
+    /* Make input widget boxes black/transparent */
+    .stTextInput > div > div > input,
+    .stNumberInput > div > div > input,
+    .stSlider > div,
+    .stButton > button {
+        background-color: #000000 !important;
+        border: 1px solid #000000 !important;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 # --- INPUT SECTION ---
 with st.container():
     st.markdown("""
@@ -4643,181 +4667,45 @@ if analyze_btn:
                                 return f"{val:.2f}"  # Treat as ratio/other
                     return str(val)
                 
-                # ===== TOP METRICS STRIP =====
+                # ===== VALUATION SNAPSHOT - SIMPLE & BULLETPROOF =====
                 st.markdown(f'<div style="color: {COLOR_ACCENT_1}; font-weight: 700; font-size: 1.5rem; margin: 1.5rem 0 1rem 0;">Valuation Snapshot</div>', unsafe_allow_html=True)
                 
-                try:
-                    # Ensure fundamentals has data - use the already-fetched fundamentals (with retry logic)
-                    # Note: fundamentals was already fetched with get_fundamental_data() which has exponential backoff
-                    if not fundamentals:
-                        fundamentals = {}
-                        logger.warning(f"Fundamentals is None for {ticker}, using empty dict")
-                    
-                    logger.info(f"DEBUG: fundamentals dict for {ticker}: {list(fundamentals.keys())}, pe_ratio={fundamentals.get('pe_ratio')}, peg_ratio={fundamentals.get('peg_ratio')}, div_yield={fundamentals.get('dividend_yield')}, ev={fundamentals.get('ev_ebitda')}, target={fundamentals.get('target_price')}")
-                    
-                    # Only fetch additional fields if they're missing from fundamentals
-                    # This minimizes additional API calls and respects rate limiting
-                    needs_additional_fetch = (
-                        not fundamentals.get('pe_ratio') and 
-                        not fundamentals.get('peg_ratio') and
-                        not fundamentals.get('ev_ebitda') and
-                        not fundamentals.get('target_price')
-                    )
-                    
-                    if needs_additional_fetch:
-                        try:
-                            logger.debug(f"Fetching missing valuation metrics for {ticker}")
-                            stock = yf.Ticker(ticker)
-                            info = stock.info
-                            # Only update missing fields
-                            if not fundamentals.get('pe_ratio'):
-                                fundamentals['pe_ratio'] = info.get('trailingPE') or info.get('forwardPE')
-                            if not fundamentals.get('peg_ratio'):
-                                fundamentals['peg_ratio'] = info.get('pegRatio')
-                            if not fundamentals.get('ev_ebitda'):
-                                fundamentals['ev_ebitda'] = info.get('enterpriseToEbitda')
-                            if not fundamentals.get('target_price'):
-                                fundamentals['target_price'] = info.get('targetMeanPrice') or info.get('targetMedianPrice')
-                            if not fundamentals.get('upside_pct') and fundamentals.get('target_price') and fundamentals.get('current_price'):
-                                if fundamentals['current_price'] and fundamentals['current_price'] > 0:
-                                    fundamentals['upside_pct'] = (fundamentals['target_price'] - fundamentals['current_price']) / fundamentals['current_price']
-                        except Exception as e:
-                            # Silently handle rate limiting and other yfinance errors
-                            logger.debug(f"Could not fetch additional valuation metrics from yfinance: {str(e)[:100]}")
-                            # Continue with what we have - better to show partial data than nothing
-                            pass
-                    
-                    # Count metrics to determine grid columns dynamically
-                    # Check if metrics exist (not None and not 'N/A')
-                    metric_count = 0
-                    has_pe = fundamentals and fundamentals.get('pe_ratio') is not None
-                    has_peg = fundamentals and fundamentals.get('peg_ratio') is not None
-                    has_div = fundamentals and fundamentals.get('dividend_yield') is not None
-                    has_ev = fundamentals and fundamentals.get('ev_ebitda') is not None
-                    has_target = fundamentals and fundamentals.get('target_price') is not None
-                    
-                    if has_pe:
-                        metric_count += 1
-                    if has_peg or has_div:
-                        metric_count += 1
-                    if has_ev:
-                        metric_count += 1
-                    if has_target:
-                        metric_count += 1
-                    
-                    logger.debug(f"Valuation metrics for {ticker}: PE={has_pe}, PEG={has_peg}, DIV={has_div}, EV={has_ev}, TARGET={has_target}, count={metric_count}")
-                    
-                except Exception as section_error:
-                    logger.error(f"ERROR in valuation snapshot section: {str(section_error)[:200]}")
-                    st.error(f"Error rendering valuation snapshot: {str(section_error)[:100]}")
-                    
-                    # Set grid columns based on actual metric count (3 or 4)
-                    grid_cols = f"1fr 1fr 1fr 1fr" if metric_count == 4 else "1fr 1fr 1fr" if metric_count >= 3 else f"1fr " * metric_count if metric_count > 0 else "1fr"
-                    
-                    metrics_html = f'<div style="background: linear-gradient(135deg, {COLOR_BG_CARD} 0%, rgba(39, 174, 96, 0.05) 100%); padding: 1.5rem; border-radius: 10px; border: 1px solid rgba(39, 174, 96, 0.2); margin-bottom: 1.5rem;"><div style="display: grid; grid-template-columns: {grid_cols}; gap: 2.5rem; text-align: center;">'
-                    
-                    # P/E Ratio
-                    if has_pe:
-                        pe_bg, pe_color = get_metric_box_colors('P/E Ratio', fundamentals['pe_ratio'])
-                        pe_ratio_val = fundamentals['pe_ratio']
-                        # Flag extremely high P/E ratios for data quality clarity
-                        pe_warning = '' if pe_ratio_val < 100 else '<br><span style="font-size: 0.7rem; color: #f39c12; margin-top: 0.25rem;">⚠ Check earnings definition</span>'
-                        metrics_html += f"""
-                        <div>
-                            <div style="color: {COLOR_SECONDARY_TEXT}; font-size: 0.85rem; margin-bottom: 0.75rem; font-weight: 500;">
-                                <span class="metric-tooltip">
-                                    P/E Ratio (TTM)
-                                    <span class="tooltip-icon">ℹ</span>
-                                    <span class="tooltip-text">Trailing Twelve Month P/E from yfinance. Uses GAAP earnings (may include one-time items). Compare to sector avg or analyst forward estimates.</span>
-                                </span>
-                            </div>
-                            <div style="color: {pe_color}; font-size: 1.6rem; font-weight: 700;">{pe_ratio_val:.1f}x{pe_warning}</div>
-                        </div>"""
-                    
-                    # PEG Ratio or Dividend Yield (fallback)
-                    if has_peg:
-                        peg_bg, peg_color = get_metric_box_colors('PEG Ratio', fundamentals['peg_ratio'])
-                        metrics_html += f"""
-                        <div>
-                            <div style="color: {COLOR_SECONDARY_TEXT}; font-size: 0.85rem; margin-bottom: 0.75rem; font-weight: 500;">
-                                <span class="metric-tooltip">
-                                    PEG Ratio
-                                    <span class="tooltip-icon">ℹ</span>
-                                    <span class="tooltip-text">P/E divided by growth rate. < 1.0 = undervalued, > 2.0 = expensive.</span>
-                                </span>
-                            </div>
-                            <div style="color: {peg_color}; font-size: 1.6rem; font-weight: 700;">{fundamentals['peg_ratio']:.2f}</div>
-                        </div>"""
-                    elif has_div:
-                        # Fallback to dividend yield if PEG not available
-                        div_yield = fundamentals['dividend_yield'] * 100
-                        div_color = COLOR_POSITIVE if div_yield > 2 else COLOR_WARNING if div_yield > 0 else COLOR_SECONDARY_TEXT
-                        metrics_html += f"""
-                        <div>
-                            <div style="color: {COLOR_SECONDARY_TEXT}; font-size: 0.85rem; margin-bottom: 0.75rem; font-weight: 500;">
-                                <span class="metric-tooltip">
-                                    Dividend Yield
-                                    <span class="tooltip-icon">ℹ</span>
-                                    <span class="tooltip-text">Annual dividend as % of price. Higher = more income, but may indicate low growth.</span>
-                                </span>
-                            </div>
-                            <div style="color: {div_color}; font-size: 1.6rem; font-weight: 700;">{div_yield:.2f}%</div>
-                        </div>"""
-                    
-                    # EV/EBITDA
-                    if has_ev:
-                        ev_bg, ev_color = get_metric_box_colors('EV/EBITDA', fundamentals['ev_ebitda'])
-                        metrics_html += f"""
-                        <div>
-                            <div style="color: {COLOR_SECONDARY_TEXT}; font-size: 0.85rem; margin-bottom: 0.75rem; font-weight: 500;">
-                                <span class="metric-tooltip">
-                                    EV/EBITDA (TTM)
-                                    <span class="tooltip-icon">ℹ</span>
-                                    <span class="tooltip-text">Enterprise value / EBITDA. < 10 = good, 10-15 = fair, > 15 = expensive.</span>
-                                </span>
-                            </div>
-                            <div style="color: {ev_color}; font-size: 1.6rem; font-weight: 700;">{fundamentals['ev_ebitda']:.1f}x</div>
-                        </div>"""
-                    
-                    # Target Price
-                    if has_target:
-                        arrow_symbol = "↑" if fundamentals['upside_pct'] and fundamentals['upside_pct'] > 0 else "↓"
-                        arrow_color = COLOR_POSITIVE if arrow_symbol == "↑" else COLOR_NEGATIVE
-                        upside_val = fundamentals['upside_pct'] if fundamentals['upside_pct'] else 0
-                        metrics_html += f"""
-                        <div>
-                            <div style="color: {COLOR_SECONDARY_TEXT}; font-size: 0.85rem; margin-bottom: 0.75rem; font-weight: 500;">
-                                <span class="metric-tooltip">
-                                    Target Price
-                                    <span class="tooltip-icon">ℹ</span>
-                                    <span class="tooltip-text">Consensus analyst target. Upside/downside vs current price.</span>
-                                </span>
-                            </div>
-                            <div style="color: {arrow_color}; font-size: 1.6rem; font-weight: 700;">${fundamentals['target_price']:,.2f}</div>
-                            <div style="font-size: 0.85rem; margin-top: 0.5rem; color: {arrow_color}; font-weight: 500;">{arrow_symbol} {f"{fundamentals['upside_pct']:+.1%}" if fundamentals['upside_pct'] else 'N/A'}</div>
-                        </div>"""
-                    
-                    metrics_html += '</div></div>'
-                    
-                    # Always display the metrics container - if any metrics exist, show them
-                    # This gives users visibility into what data is available vs unavailable
-                    if metric_count > 0:
-                        st.markdown(metrics_html, unsafe_allow_html=True)
-                    else:
-                        # Only show unavailable message if truly no metrics at all
-                        st.info(
-                            f"📊 **Valuation data unavailable for {ticker}**\n\n"
-                            "Valuation metrics (P/E, PEG, EV/EBITDA, Target Price) are not currently available. "
-                            "This may be due to:\n"
-                            "• New or recently IPO'd companies with limited data\n"
-                            "• Index funds/ETFs (no traditional valuation metrics)\n"
-                            "• API rate limiting (please try again in a moment)\n\n"
-                            "Focus on the **Risk & Returns** metrics above for performance analysis."
-                        )
+                # Get fundamentals (already fetched earlier)
+                if not fundamentals:
+                    fundamentals = {}
                 
-                except Exception as section_error:
-                    logger.error(f"ERROR rendering valuation snapshot: {str(section_error)[:200]}")
-                    st.error(f"Error rendering valuation snapshot: {str(section_error)[:100]}")
+                # Extract metrics safely
+                pe = fundamentals.get('pe_ratio')
+                peg = fundamentals.get('peg_ratio')
+                div_yield = fundamentals.get('dividend_yield')
+                ev = fundamentals.get('ev_ebitda')
+                target = fundamentals.get('target_price')
+                current_price = fundamentals.get('current_price')
+                upside = fundamentals.get('upside_pct')
+                
+                # Count how many metrics we have
+                metrics_list = []
+                if pe is not None:
+                    metrics_list.append(('P/E Ratio', f'{pe:.1f}x', pe))
+                if peg is not None:
+                    metrics_list.append(('PEG Ratio', f'{peg:.2f}', peg))
+                elif div_yield is not None:
+                    div_pct = div_yield * 100 if div_yield else 0
+                    metrics_list.append(('Dividend Yield', f'{div_pct:.2f}%', div_yield))
+                if ev is not None:
+                    metrics_list.append(('EV/EBITDA', f'{ev:.1f}x', ev))
+                if target is not None and current_price is not None:
+                    metrics_list.append(('Target Price', f'${target:,.2f}', target))
+                
+                # Display metrics or message
+                if len(metrics_list) > 0:
+                    # Build simple grid
+                    cols = st.columns(len(metrics_list))
+                    for idx, (label, value, raw_val) in enumerate(metrics_list):
+                        with cols[idx]:
+                            st.metric(label=label, value=value)
+                else:
+                    st.info("📊 Valuation metrics not currently available for this ticker.")
                 
                 # Clarification on model differences
                 st.markdown(f"""
