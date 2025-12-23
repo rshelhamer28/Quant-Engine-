@@ -1825,7 +1825,9 @@ def _validate_numeric_value(
         return None
 
 def get_fundamental_data(ticker, max_retries=3, initial_backoff=1.0):
-    """Enhanced fundamental data with retry logic and fallbacks for rate limiting"""
+    """Enhanced fundamental data with robust retry logic and comprehensive fallbacks"""
+    import random
+    
     # Initialize result dict with all expected fields (always returns structured dict)
     result = {
         'current_price': None,
@@ -1847,208 +1849,249 @@ def get_fundamental_data(ticker, max_retries=3, initial_backoff=1.0):
         'partial_data': False
     }
     
-    # Default sector/industry mappings by common tickers
+    # Comprehensive ticker defaults covering major stocks and sectors
     ticker_defaults = {
+        # Tech
         'AAPL': {'sector': 'Technology', 'industry': 'Consumer Electronics'},
         'MSFT': {'sector': 'Technology', 'industry': 'Software'},
         'GOOGL': {'sector': 'Technology', 'industry': 'Internet Services'},
         'AMZN': {'sector': 'Consumer Cyclical', 'industry': 'Internet Retail'},
         'NVDA': {'sector': 'Technology', 'industry': 'Semiconductors'},
-        'TSLA': {'sector': 'Consumer Cyclical', 'industry': 'Auto Manufacturers'},
         'META': {'sector': 'Technology', 'industry': 'Internet Services'},
-        'JPM': {'sector': 'Financials', 'industry': 'Banks'},
+        'INTC': {'sector': 'Technology', 'industry': 'Semiconductors'},
+        'AMD': {'sector': 'Technology', 'industry': 'Semiconductors'},
+        'ORCL': {'sector': 'Technology', 'industry': 'Software'},
+        'CSCO': {'sector': 'Technology', 'industry': 'Networking'},
+        # Automotive
+        'TSLA': {'sector': 'Consumer Cyclical', 'industry': 'Auto Manufacturers'},
+        'GM': {'sector': 'Consumer Cyclical', 'industry': 'Auto Manufacturers'},
+        'F': {'sector': 'Consumer Cyclical', 'industry': 'Auto Manufacturers'},
+        'TM': {'sector': 'Consumer Cyclical', 'industry': 'Auto Manufacturers'},
+        'HMC': {'sector': 'Consumer Cyclical', 'industry': 'Auto Manufacturers'},
+        # Healthcare/Pharma
         'JNJ': {'sector': 'Healthcare', 'industry': 'Pharmaceuticals'},
+        'PFE': {'sector': 'Healthcare', 'industry': 'Pharmaceuticals'},
+        'MRK': {'sector': 'Healthcare', 'industry': 'Pharmaceuticals'},
+        'ABT': {'sector': 'Healthcare', 'industry': 'Diversified Healthcare'},
+        'UNH': {'sector': 'Healthcare', 'industry': 'Healthcare'},
+        'LLY': {'sector': 'Healthcare', 'industry': 'Pharmaceuticals'},
+        # Financials
+        'JPM': {'sector': 'Financials', 'industry': 'Banks'},
+        'BAC': {'sector': 'Financials', 'industry': 'Banks'},
+        'WFC': {'sector': 'Financials', 'industry': 'Banks'},
+        'GS': {'sector': 'Financials', 'industry': 'Investment Banking'},
+        'MS': {'sector': 'Financials', 'industry': 'Investment Banking'},
+        'BLK': {'sector': 'Financials', 'industry': 'Asset Management'},
+        'SCHW': {'sector': 'Financials', 'industry': 'Brokerage'},
+        # Consumer
+        'WMT': {'sector': 'Consumer Staples', 'industry': 'Retail'},
+        'COST': {'sector': 'Consumer Staples', 'industry': 'Retail'},
+        'MCD': {'sector': 'Consumer Discretionary', 'industry': 'Restaurants'},
+        'NKE': {'sector': 'Consumer Discretionary', 'industry': 'Apparel'},
+        'SBUX': {'sector': 'Consumer Discretionary', 'industry': 'Restaurants'},
+        # Energy/Materials/Metals
+        'XOM': {'sector': 'Energy', 'industry': 'Oil & Gas'},
+        'CVX': {'sector': 'Energy', 'industry': 'Oil & Gas'},
+        'COP': {'sector': 'Energy', 'industry': 'Oil & Gas'},
+        'MMP': {'sector': 'Energy', 'industry': 'Pipeline'},
+        'FCX': {'sector': 'Materials', 'industry': 'Copper Mining'},
+        'CLF': {'sector': 'Materials', 'industry': 'Steel'},
+        'TMC': {'sector': 'Materials', 'industry': 'Diversified Metals & Mining'},
+        'AA': {'sector': 'Materials', 'industry': 'Aluminum'},
+        'NEM': {'sector': 'Materials', 'industry': 'Gold Mining'},
+        'GLD': {'sector': 'Materials', 'industry': 'Gold'},
+        'SLV': {'sector': 'Materials', 'industry': 'Silver'},
+        # Industrial
+        'BA': {'sector': 'Industrials', 'industry': 'Aerospace & Defense'},
+        'CAT': {'sector': 'Industrials', 'industry': 'Machinery'},
+        'MMM': {'sector': 'Industrials', 'industry': 'Diversified Manufacturing'},
+        'GE': {'sector': 'Industrials', 'industry': 'Diversified Manufacturing'},
+        'RTX': {'sector': 'Industrials', 'industry': 'Aerospace & Defense'},
+        # Utilities & Real Estate
+        'NEE': {'sector': 'Utilities', 'industry': 'Utilities'},
+        'DUK': {'sector': 'Utilities', 'industry': 'Utilities'},
+        'SO': {'sector': 'Utilities', 'industry': 'Utilities'},
+        'VNQ': {'sector': 'Real Estate', 'industry': 'REIT'},
     }
     
-    # Helper function for exponential backoff with jitter
-    def retry_with_backoff(max_retries, initial_backoff):
-        import random
-        for attempt in range(max_retries):
-            try:
-                logger.info(f"Fetching fundamental data for {ticker} (attempt {attempt + 1}/{max_retries})")
-                stock = yf.Ticker(ticker)
-                info = stock.info
-                
-                # Validate ticker info schema
-                validate_ticker_info(info, ticker)
-                return info
+    # Step 1: Try to fetch from yfinance with retry logic
+    info = None
+    for attempt in range(max_retries):
+        try:
+            logger.info(f"Fetching fundamental data for {ticker} (attempt {attempt + 1}/{max_retries})")
+            stock = yf.Ticker(ticker)
+            info = stock.info
             
-            except Exception as e:
-                error_str = str(e).lower()
-                is_rate_limit = 'rate' in error_str or 'too many' in error_str
-                
-                if is_rate_limit and attempt < max_retries - 1:
-                    # Exponential backoff with jitter: backoff_time = initial_backoff * (2^attempt) + random(0-1s)
-                    backoff_time = initial_backoff * (2 ** attempt) + random.uniform(0, 1)
-                    logger.warning(f"Rate limit hit for {ticker}. Retrying in {backoff_time:.1f}s...")
-                    time.sleep(backoff_time)
-                    continue
+            # Validate ticker info schema
+            validate_ticker_info(info, ticker)
+            logger.info(f"Successfully fetched fundamental data for {ticker}")
+            break  # Exit loop on success
+            
+        except Exception as e:
+            error_str = str(e).lower()
+            is_rate_limit = 'rate' in error_str or 'too many' in error_str
+            
+            if is_rate_limit and attempt < max_retries - 1:
+                # Exponential backoff with jitter
+                backoff_time = initial_backoff * (2 ** attempt) + random.uniform(0, 1)
+                logger.warning(f"Rate limit hit for {ticker} (attempt {attempt + 1}/{max_retries}). Retrying in {backoff_time:.1f}s...")
+                time.sleep(backoff_time)
+                # Continue to next iteration
+            else:
+                # Final attempt failed or not a rate limit error
+                if is_rate_limit:
+                    logger.warning(f"Rate limit persisted for {ticker} after {max_retries} attempts - using fallback data")
                 else:
-                    # Not a rate limit error or max retries reached
-                    if is_rate_limit:
-                        logger.debug(f"Rate limit persisted for {ticker} after {max_retries} retries - using defaults")
-                    else:
-                        error_type = SafeErrorHandler.log_exception(e, "get_fundamental_data", ticker)
-                        safe_msg = SafeErrorHandler.safe_error_message(error_type)
-                        result['fetch_error'] = safe_msg
-                    return None
-        
-        return None
+                    error_type = SafeErrorHandler.log_exception(e, "get_fundamental_data", ticker)
+                    safe_msg = SafeErrorHandler.safe_error_message(error_type)
+                    result['fetch_error'] = safe_msg
+                    logger.debug(f"Non-rate-limit error fetching fundamentals for {ticker}: {str(e)[:100]}")
+                # Don't retry further
+                break
     
-    try:
-        # Attempt to fetch with retry logic
-        info = retry_with_backoff(max_retries, initial_backoff)
-        
-        if info is None:
-            # Use defaults for this ticker if available
-            if ticker in ticker_defaults:
+    # Step 2: If we got data, extract it; otherwise use fallbacks
+    if info is not None:
+        try:
+            # Safely extract current price from multiple fields
+            current_price = None
+            price_fields = ['currentPrice', 'regularMarketPrice', 'previousClose', 'bid', 'ask']
+            for field in price_fields:
+                if field in info and info[field] is not None:
+                    current_price = _coerce_to_float(info[field])
+                    if current_price is not None:
+                        break
+            result['current_price'] = current_price
+            
+            # Fallback: try 1-day history if price not found
+            if current_price is None:
+                try:
+                    stock = yf.Ticker(ticker)
+                    hist = stock.history(period="1d")
+                    if not hist.empty:
+                        current_price = hist['Close'].iloc[-1]
+                        result['current_price'] = current_price
+                        track_fallback_usage('yfinance_1d_fallback')
+                except (KeyError, IndexError, TypeError):
+                    pass
+            
+            # Fallback: try get_price_data
+            if current_price is None:
+                hist, _ = get_price_data(ticker)
+                if hist is not None and not hist.empty:
+                    current_price = hist['Price'].iloc[-1]
+                    result['current_price'] = current_price
+                    track_fallback_usage('yfinance_cache_fallback')
+            
+            # Calculate upside with safe division
+            target_price = (
+                info.get('targetMeanPrice') or
+                info.get('targetHighPrice') or
+                info.get('targetMedianPrice')
+            )
+            target_price = _coerce_to_float(target_price)
+            result['target_price'] = target_price
+            
+            if target_price and current_price and current_price > 0:
+                result['upside_pct'] = (target_price - current_price) / current_price
+            
+            # Extract short float with type coercion
+            short_float = (
+                info.get('shortPercentOfFloat') or
+                info.get('shortInterest') or
+                info.get('sharesShort')
+            )
+            short_float = _coerce_to_float(short_float)
+            if short_float:
+                short_float = short_float / 100 if short_float > 1 else short_float
+                result['short_float'] = short_float
+            
+            result['short_ratio'] = _coerce_to_float(info.get('shortRatio'))
+            result['inst_ownership'] = _coerce_to_float(
+                info.get('heldPercentInstitutions') or
+                info.get('institutionPercent')
+            )
+            
+            # PE and PEG ratios with safe arithmetic
+            pe_ratio = _coerce_to_float(info.get('trailingPE') or info.get('forwardPE'))
+            result['pe_ratio'] = pe_ratio
+            
+            if pe_ratio:
+                # Try explicit PEG first
+                peg_ratio = info.get('pegRatio')
+                peg_ratio = _coerce_to_float(peg_ratio)
+                if peg_ratio and peg_ratio > 0:
+                    result['peg_ratio'] = peg_ratio
+                # Fallback: calculate from earnings growth
+                elif 'earningsGrowth' in info and info['earningsGrowth']:
+                    try:
+                        earnings_growth = float(info['earningsGrowth'])
+                        if earnings_growth > 0:
+                            result['peg_ratio'] = _safe_divide(pe_ratio, earnings_growth * 100)
+                    except (ValueError, TypeError):
+                        pass
+            
+            result['ev_ebitda'] = _coerce_to_float(info.get('enterpriseToEbitda'))
+            
+            # Market cap with display formatting
+            market_cap = _coerce_to_float(info.get('marketCap'))
+            result['market_cap'] = market_cap
+            if market_cap:
+                if market_cap >= 1e12:
+                    result['market_cap_display'] = f"${market_cap/1e12:.2f}T"
+                elif market_cap >= 1e9:
+                    result['market_cap_display'] = f"${market_cap/1e9:.2f}B"
+                elif market_cap >= 1e6:
+                    result['market_cap_display'] = f"${market_cap/1e6:.2f}M"
+                else:
+                    result['market_cap_display'] = f"${market_cap:,.0f}"
+            
+            # Extract sector and industry from API response
+            sector = info.get('sector')
+            industry = info.get('industry')
+            
+            # Validate and set sector (never return None)
+            if sector and sector != 'N/A' and sector != 'None':
+                result['sector'] = sector
+            elif ticker in ticker_defaults:
                 result['sector'] = ticker_defaults[ticker]['sector']
-                result['industry'] = ticker_defaults[ticker]['industry']
             else:
                 result['sector'] = 'Technology'
+            
+            # Validate and set industry (never return None)
+            if industry and industry != 'N/A' and industry != 'None':
+                result['industry'] = industry
+            elif ticker in ticker_defaults:
+                result['industry'] = ticker_defaults[ticker]['industry']
+            else:
                 result['industry'] = 'Unknown'
-            result['partial_data'] = True
-            logger.debug(f"Using default/fallback sector/industry for {ticker}")
+            
+            result['beta'] = _coerce_to_float(info.get('beta'))
+            result['company_name'] = info.get('longName', ticker)
+            
+            # Track data completeness
+            non_null_fields = sum(1 for v in result.values() if v is not None and v != 'N/A')
+            if non_null_fields < 5:
+                result['partial_data'] = True
+                logger.warning(f"Fundamental data for {ticker} is incomplete ({non_null_fields} fields)")
+            
             return result
         
-        # Safely extract current price from multiple fields
-        current_price = None
-        price_fields = ['currentPrice', 'regularMarketPrice', 'previousClose', 'bid', 'ask']
-        for field in price_fields:
-            if field in info and info[field] is not None:
-                current_price = _coerce_to_float(info[field])
-                if current_price is not None:
-                    break
-        result['current_price'] = current_price
-        
-        # Fallback: try 1-day history
-        if current_price is None:
-            try:
-                stock = yf.Ticker(ticker)
-                hist = stock.history(period="1d")
-                if not hist.empty:
-                    current_price = hist['Close'].iloc[-1]
-                    result['current_price'] = current_price
-                    track_fallback_usage('yfinance_1d_fallback')
-            except (KeyError, IndexError, TypeError):
-                pass
-        
-        # Fallback: try get_price_data
-        if current_price is None:
-            hist, _ = get_price_data(ticker)
-            if hist is not None and not hist.empty:
-                current_price = hist['Price'].iloc[-1]
-                result['current_price'] = current_price
-                track_fallback_usage('yfinance_cache_fallback')
-        
-        # Calculate upside with safe division
-        target_price = (
-            info.get('targetMeanPrice') or
-            info.get('targetHighPrice') or
-            info.get('targetMedianPrice')
-        )
-        target_price = _coerce_to_float(target_price)
-        result['target_price'] = target_price
-        
-        if target_price and current_price and current_price > 0:
-            result['upside_pct'] = (target_price - current_price) / current_price
-        
-        # Extract short float with type coercion
-        short_float = (
-            info.get('shortPercentOfFloat') or
-            info.get('shortInterest') or
-            info.get('sharesShort')
-        )
-        short_float = _coerce_to_float(short_float)
-        if short_float:
-            short_float = short_float / 100 if short_float > 1 else short_float
-            result['short_float'] = short_float
-        
-        result['short_ratio'] = _coerce_to_float(info.get('shortRatio'))
-        result['inst_ownership'] = _coerce_to_float(
-            info.get('heldPercentInstitutions') or
-            info.get('institutionPercent')
-        )
-        
-        # PE and PEG ratios with safe arithmetic
-        pe_ratio = _coerce_to_float(info.get('trailingPE') or info.get('forwardPE'))
-        result['pe_ratio'] = pe_ratio
-        
-        if pe_ratio:
-            # Try explicit PEG first
-            peg_ratio = info.get('pegRatio')
-            peg_ratio = _coerce_to_float(peg_ratio)
-            if peg_ratio and peg_ratio > 0:
-                result['peg_ratio'] = peg_ratio
-            # Fallback: calculate from earnings growth
-            elif 'earningsGrowth' in info and info['earningsGrowth']:
-                try:
-                    earnings_growth = float(info['earningsGrowth'])
-                    if earnings_growth > 0:
-                        result['peg_ratio'] = _safe_divide(pe_ratio, earnings_growth * 100)
-                except (ValueError, TypeError):
-                    pass
-        
-        result['ev_ebitda'] = _coerce_to_float(info.get('enterpriseToEbitda'))
-        
-        # Market cap with display formatting
-        market_cap = _coerce_to_float(info.get('marketCap'))
-        result['market_cap'] = market_cap
-        if market_cap:
-            if market_cap >= 1e12:
-                result['market_cap_display'] = f"${market_cap/1e12:.2f}T"
-            elif market_cap >= 1e9:
-                result['market_cap_display'] = f"${market_cap/1e9:.2f}B"
-            elif market_cap >= 1e6:
-                result['market_cap_display'] = f"${market_cap/1e6:.2f}M"
-            else:
-                result['market_cap_display'] = f"${market_cap:,.0f}"
-        
-        # Extract sector and industry with fallbacks
-        sector = info.get('sector')
-        industry = info.get('industry')
-        
-        # Validate and set sector (never return None)
-        if sector and sector != 'N/A':
-            result['sector'] = sector
-        elif ticker in ticker_defaults:
-            result['sector'] = ticker_defaults[ticker]['sector']
-        else:
-            result['sector'] = 'Technology'
-        
-        # Validate and set industry (never return None)
-        if industry and industry != 'N/A':
-            result['industry'] = industry
-        elif ticker in ticker_defaults:
-            result['industry'] = ticker_defaults[ticker]['industry']
-        else:
-            result['industry'] = 'Unknown'
-        
-        result['beta'] = _coerce_to_float(info.get('beta'))
-        result['company_name'] = info.get('longName', ticker)
-        
-        # Track data completeness
-        non_null_fields = sum(1 for v in result.values() if v is not None and v != 'N/A')
-        if non_null_fields < 5:
-            result['partial_data'] = True
-            logger.warning(f"Fundamental data for {ticker} is incomplete ({non_null_fields} fields)")
-        
-        return result
-        
-    except Exception as e:
-        # Final fallback
-        logger.error(f"Exception in get_fundamental_data for {ticker}: {str(e)[:100]}")
-        if ticker in ticker_defaults:
-            result['sector'] = ticker_defaults[ticker]['sector']
-            result['industry'] = ticker_defaults[ticker]['industry']
-        else:
-            result['sector'] = 'Technology'
-            result['industry'] = 'Unknown'
-        result['partial_data'] = True
-        return result
-        result['partial_data'] = True
-        logger.debug(f"Returning partial fundamental data for {ticker}")
-        return result
+        except Exception as e:
+            logger.error(f"Error processing fundamental data for {ticker}: {str(e)[:100]}")
+            # Fall through to defaults
+    
+    # Step 3: Fallback to defaults (used when API fails or returns no data)
+    if ticker in ticker_defaults:
+        result['sector'] = ticker_defaults[ticker]['sector']
+        result['industry'] = ticker_defaults[ticker]['industry']
+        logger.info(f"Using default sector/industry for {ticker}: {result['sector']}/{result['industry']}")
+    else:
+        result['sector'] = 'Technology'
+        result['industry'] = 'Unknown'
+        logger.warning(f"No data and no defaults for {ticker}, using generic Technology/Unknown")
+    
+    result['partial_data'] = True
+    return result
 
 def analyze_financial_sentiment(text):
     """OPTIMIZED: Use pre-compiled sentiment analyzer (5-10x faster).
@@ -4668,23 +4711,32 @@ if analyze_btn:
                         pass
                 
                 # Count metrics to determine grid columns dynamically
+                # Use > 0 check for numeric values to exclude None and 0
                 metric_count = 0
-                if fundamentals and fundamentals.get('pe_ratio') is not None:
+                has_pe = fundamentals and fundamentals.get('pe_ratio') is not None and fundamentals.get('pe_ratio') > 0
+                has_peg = fundamentals and fundamentals.get('peg_ratio') is not None and fundamentals.get('peg_ratio') > 0
+                has_div = fundamentals and fundamentals.get('dividend_yield') is not None and fundamentals.get('dividend_yield') > 0
+                has_ev = fundamentals and fundamentals.get('ev_ebitda') is not None and fundamentals.get('ev_ebitda') > 0
+                has_target = fundamentals and fundamentals.get('target_price') is not None and fundamentals.get('target_price') > 0
+                
+                if has_pe:
                     metric_count += 1
-                if fundamentals and (fundamentals.get('peg_ratio') is not None or fundamentals.get('dividend_yield') is not None):
+                if has_peg or has_div:
                     metric_count += 1
-                if fundamentals and fundamentals.get('ev_ebitda') is not None:
+                if has_ev:
                     metric_count += 1
-                if fundamentals and fundamentals.get('target_price') is not None:
+                if has_target:
                     metric_count += 1
                 
+                logger.debug(f"Valuation metrics for {ticker}: PE={has_pe}, PEG={has_peg}, DIV={has_div}, EV={has_ev}, TARGET={has_target}, count={metric_count}")
+                
                 # Set grid columns based on actual metric count (3 or 4)
-                grid_cols = f"1fr 1fr 1fr 1fr" if metric_count == 4 else "1fr 1fr 1fr"
+                grid_cols = f"1fr 1fr 1fr 1fr" if metric_count == 4 else "1fr 1fr 1fr" if metric_count >= 3 else f"1fr " * metric_count if metric_count > 0 else "1fr"
                 
                 metrics_html = f'<div style="background: linear-gradient(135deg, {COLOR_BG_CARD} 0%, rgba(39, 174, 96, 0.05) 100%); padding: 1.5rem; border-radius: 10px; border: 1px solid rgba(39, 174, 96, 0.2); margin-bottom: 1.5rem;"><div style="display: grid; grid-template-columns: {grid_cols}; gap: 2.5rem; text-align: center;">'
                 
                 # P/E Ratio
-                if fundamentals and fundamentals.get('pe_ratio') is not None:
+                if has_pe:
                     pe_bg, pe_color = get_metric_box_colors('P/E Ratio', fundamentals['pe_ratio'])
                     pe_ratio_val = fundamentals['pe_ratio']
                     # Flag extremely high P/E ratios for data quality clarity
@@ -4702,7 +4754,7 @@ if analyze_btn:
                     </div>"""
                 
                 # PEG Ratio or Dividend Yield (fallback)
-                if fundamentals and fundamentals.get('peg_ratio') is not None:
+                if has_peg:
                     peg_bg, peg_color = get_metric_box_colors('PEG Ratio', fundamentals['peg_ratio'])
                     metrics_html += f"""
                     <div>
@@ -4715,7 +4767,7 @@ if analyze_btn:
                         </div>
                         <div style="color: {peg_color}; font-size: 1.6rem; font-weight: 700;">{fundamentals['peg_ratio']:.2f}</div>
                     </div>"""
-                elif fundamentals and fundamentals.get('dividend_yield') is not None:
+                elif has_div:
                     # Fallback to dividend yield if PEG not available
                     div_yield = fundamentals['dividend_yield'] * 100
                     div_color = COLOR_POSITIVE if div_yield > 2 else COLOR_WARNING if div_yield > 0 else COLOR_SECONDARY_TEXT
@@ -4732,7 +4784,7 @@ if analyze_btn:
                     </div>"""
                 
                 # EV/EBITDA
-                if fundamentals and fundamentals['ev_ebitda']:
+                if has_ev:
                     ev_bg, ev_color = get_metric_box_colors('EV/EBITDA', fundamentals['ev_ebitda'])
                     metrics_html += f"""
                     <div>
@@ -4747,7 +4799,7 @@ if analyze_btn:
                     </div>"""
                 
                 # Target Price
-                if fundamentals and fundamentals['target_price']:
+                if has_target:
                     arrow_symbol = "↑" if fundamentals['upside_pct'] and fundamentals['upside_pct'] > 0 else "↓"
                     arrow_color = COLOR_POSITIVE if arrow_symbol == "↑" else COLOR_NEGATIVE
                     upside_val = fundamentals['upside_pct'] if fundamentals['upside_pct'] else 0
@@ -4767,12 +4819,8 @@ if analyze_btn:
                 metrics_html += '</div></div>'
                 st.markdown(metrics_html, unsafe_allow_html=True)
                 
-                # Check if any metrics were actually displayed
-                if (not fundamentals or 
-                    (not fundamentals.get('pe_ratio') and 
-                     not fundamentals.get('peg_ratio') and 
-                     not fundamentals.get('ev_ebitda') and 
-                     not fundamentals.get('target_price'))):
+                # Check if any metrics were actually displayed (using the boolean flags)
+                if metric_count == 0:
                     st.info(
                         f"📊 **Valuation data unavailable for {ticker}**\n\n"
                         "Valuation metrics (P/E, PEG, EV/EBITDA, Target Price) are not currently available. "
