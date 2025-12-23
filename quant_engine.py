@@ -2801,7 +2801,10 @@ def get_sector_peers(ticker, sector):
         assert isinstance(sector, str), "Sector must be string"
     except AssertionError as e:
         logger.warning(f"VALIDATION: Sector peers - {e}")
-        return []
+        return [], []
+    
+    # Normalize sector name (handle variations)
+    sector = sector.strip() if sector else 'Technology'
     
     # Enhanced sector mapping with partnership relationships
     sector_data = {
@@ -2823,19 +2826,82 @@ def get_sector_peers(ticker, sector):
                 'UNH': ['CVS', 'ANTM', 'CI', 'HUM', 'ELV']
             }
         },
+        'Financials': {
+            'peers': ['JPM', 'BAC', 'WFC', 'GS', 'MS', 'C', 'BLK', 'SCHW', 'AXP'],
+            'partnerships': {
+                'JPM': ['BAC', 'C', 'WFC', 'GS', 'MS'],
+                'GS': ['MS', 'JPM', 'BLK', 'SCHW', 'BX']
+            }
+        },
         'Financial': {
             'peers': ['JPM', 'BAC', 'WFC', 'GS', 'MS', 'C', 'BLK', 'SCHW', 'AXP'],
             'partnerships': {
                 'JPM': ['BAC', 'C', 'WFC', 'GS', 'MS'],
                 'GS': ['MS', 'JPM', 'BLK', 'SCHW', 'BX']
             }
+        },
+        'Consumer Discretionary': {
+            'peers': ['AMZN', 'TSLA', 'HD', 'MCD', 'NKE', 'SBUX', 'LULU', 'CMG', 'TPR'],
+            'partnerships': {
+                'AMZN': ['AAPL', 'MSFT', 'WMT', 'COST', 'HD'],
+                'TSLA': ['GM', 'F', 'TM', 'HMC', 'BMW']
+            }
+        },
+        'Consumer Staples': {
+            'peers': ['WMT', 'COST', 'KO', 'PEP', 'MO', 'PM', 'CL', 'SJM', 'CPB'],
+            'partnerships': {
+                'WMT': ['AMZN', 'COST', 'HD', 'LOW', 'BBY'],
+                'COST': ['WMT', 'AMZN', 'TGT', 'DLTR', 'BJ']
+            }
+        },
+        'Industrials': {
+            'peers': ['BA', 'CAT', 'MMM', 'GE', 'RTX', 'LMT', 'NOC', 'HWM', 'ITW'],
+            'partnerships': {
+                'BA': ['RTX', 'LMT', 'GD', 'NOC', 'HWM'],
+                'CAT': ['CNH', 'OSHK', 'JCB', 'KOMATSU', 'VOLV']
+            }
+        },
+        'Energy': {
+            'peers': ['XOM', 'CVX', 'COP', 'SLB', 'EOG', 'MPC', 'PSX', 'VLO', 'HES'],
+            'partnerships': {
+                'XOM': ['CVX', 'COP', 'SLB', 'GILD', 'EOG'],
+                'CVX': ['XOM', 'COP', 'MPC', 'PSX', 'VLO']
+            }
+        },
+        'Materials': {
+            'peers': ['NEM', 'GOLD', 'FCX', 'AA', 'X', 'NUE', 'SCCO', 'CLF', 'ALB'],
+            'partnerships': {
+                'NEM': ['GOLD', 'AEM', 'ASR', 'KGC', 'WPM'],
+                'FCX': ['AA', 'NUE', 'ALB', 'TECK', 'BHP']
+            }
+        },
+        'Real Estate': {
+            'peers': ['SPG', 'PLD', 'EQIX', 'PSA', 'DLR', 'O', 'WY', 'IRM', 'ARE'],
+            'partnerships': {
+                'SPG': ['PLD', 'ARE', 'DRE', 'UE', 'UMH'],
+                'EQIX': ['DLR', 'CCI', 'TWR', 'SBA', 'QTS']
+            }
+        },
+        'Utilities': {
+            'peers': ['NEE', 'SO', 'DUK', 'EXC', 'SRE', 'AEP', 'PEG', 'ED', 'XEL'],
+            'partnerships': {
+                'NEE': ['NEXN', 'DUK', 'EXC', 'SO', 'D'],
+                'SO': ['DUK', 'EXC', 'AEP', 'NEE', 'PEG']
+            }
+        },
+        'Communication Services': {
+            'peers': ['META', 'GOOGL', 'AMZN', 'NFLX', 'DIS', 'CMCSA', 'VZ', 'T', 'DISH'],
+            'partnerships': {
+                'META': ['MSFT', 'AAPL', 'GOOGL', 'AMZN', 'NFLX'],
+                'DIS': ['CMCSA', 'FOXA', 'PARA', 'NFLX', 'AMC']
+            }
         }
     }
     
-    sector_info = sector_data.get(sector, {
-        'peers': ['SPY', 'QQQ', 'DIA', 'VOO', 'IVV'],
+    sector_info = sector_data.get(sector, sector_data.get('Technology', {
+        'peers': ['AAPL', 'GOOGL', 'AMZN', 'META', 'NVDA'],
         'partnerships': {}
-    })
+    }))
     
     peers = sector_info['peers'].copy()
     if ticker in peers:
@@ -2843,6 +2909,7 @@ def get_sector_peers(ticker, sector):
     
     partnerships = sector_info['partnerships'].get(ticker, [])
     
+    logger.info(f"Retrieved {len(peers)} peers for {ticker} in sector '{sector}'")
     return peers[:5], partnerships[:3]
 
 def get_historical_backtest_metrics(metrics):
