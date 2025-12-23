@@ -1590,16 +1590,38 @@ def get_price_data(ticker: str) -> Tuple[Optional[DataFrame], Optional[DataFrame
             logger.info(f"Converting Series to DataFrame for {ticker}")
             hist = hist.to_frame()
         
-        market = yf.download(
-            BENCHMARK_TICKER,
-            period=PRICE_HISTORY_PERIOD,
-            interval="1d",
-            progress=False,
-            auto_adjust=True,
-            timeout=YFINANCE_TIMEOUT,
-            threads=False,
-            group_by='column'
-        )
+        # ===== BENCHMARK DOWNLOAD WITH RETRY LOGIC =====
+        # Retry with exponential backoff to handle rate limiting
+        import time
+        market = None
+        max_retries = 3
+        retry_delay = 2  # Start with 2 second delay
+        
+        for attempt in range(max_retries):
+            try:
+                logger.info(f"Downloading benchmark {BENCHMARK_TICKER} (attempt {attempt + 1}/{max_retries})")
+                market = yf.download(
+                    BENCHMARK_TICKER,
+                    period=PRICE_HISTORY_PERIOD,
+                    interval="1d",
+                    progress=False,
+                    auto_adjust=True,
+                    timeout=YFINANCE_TIMEOUT,
+                    threads=False,
+                    group_by='column'
+                )
+                if market is not None and not (hasattr(market, 'empty') and market.empty):
+                    break  # Success, exit retry loop
+                logger.warning(f"Benchmark download returned empty data (attempt {attempt + 1})")
+            except Exception as e:
+                logger.warning(f"Benchmark download attempt {attempt + 1} failed: {str(e)}")
+                if attempt < max_retries - 1:
+                    logger.info(f"Retrying in {retry_delay} seconds...")
+                    time.sleep(retry_delay)
+                    retry_delay *= 2  # Exponential backoff
+                else:
+                    logger.error(f"Failed to download benchmark after {max_retries} attempts")
+        
         logger.info(f"Downloaded benchmark data: type={type(market).__name__}, shape={market.shape if hasattr(market, 'shape') else 'N/A'}")
         
         # Handle case where yfinance returns a Series instead of DataFrame
