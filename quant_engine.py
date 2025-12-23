@@ -3935,7 +3935,8 @@ if analyze_btn:
                 'VNQ', 'SCHB',  # Real estate / Small cap
             }
             
-            is_etf = ticker in common_etfs or fundamentals is None or (isinstance(fundamentals, dict) and not fundamentals.get('pe_ratio'))
+            # Only show ETF notice if ticker is explicitly in the known ETF list
+            is_etf = ticker in common_etfs
             
             if is_etf:
                 st.info(
