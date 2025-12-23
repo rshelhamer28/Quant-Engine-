@@ -1350,7 +1350,20 @@ def professional_conviction_score(metrics, fundamentals):
             elif fundamentals['peg_ratio'] < 1.2: score += 6
             elif fundamentals['peg_ratio'] > 2.0: score -= 7.5
         
-        # P/E relative to sector (8%)
+        # EV/EBITDA (5%)
+        if fundamentals.get('ev_ebitda'):
+            ev_ebitda = fundamentals['ev_ebitda']
+            if ev_ebitda < 10: score += 4
+            elif ev_ebitda < 15: score += 2
+            elif ev_ebitda > 25: score -= 3
+        
+        # Dividend Yield (3%)
+        if fundamentals.get('dividend_yield'):
+            div_yield = fundamentals['dividend_yield']
+            if div_yield > 3.0: score += 3
+            elif div_yield > 1.5: score += 1.5
+        
+        # P/E relative to sector (5%)
         # Load from environment or use defaults
         def get_sector_pe_ratios():
             """Load sector P/E ratios from environment or use defaults"""
@@ -1376,12 +1389,12 @@ def professional_conviction_score(metrics, fundamentals):
         if fundamentals.get('pe_ratio') and fundamentals.get('sector'):
             sector_pe = sector_avg_pe.get(fundamentals['sector'], 20)
             pe_ratio = fundamentals['pe_ratio']
-            if pe_ratio < sector_pe * 0.8: score += 6.4
-            elif pe_ratio > sector_pe * 1.2: score -= 5
+            if pe_ratio < sector_pe * 0.8: score += 5
+            elif pe_ratio > sector_pe * 1.2: score -= 3
         
-        # Profitability & Growth (5%)
-        if fundamentals.get('profitMargins', 0) > 0.15: score += 3
-        if fundamentals.get('revenueGrowth', 0) > 0.10: score += 2
+        # Profitability & Growth (optional, if available)
+        if fundamentals.get('profitMargins', 0) > 0.15: score += 2
+        if fundamentals.get('revenueGrowth', 0) > 0.10: score += 1
     
     # 4. MARKET TECHNICALS (15%)
     # Volatility-adjusted returns (5%)
@@ -4156,24 +4169,69 @@ st.caption("Comprehensive analysis for stocks, ETFs, and index funds")
 # Display session info in sidebar (helpful for debugging)
 show_session_info()
 
-# Hide blue boxes behind input parameters
+# Hide blue boxes behind input parameters and style number input +/- buttons
 st.markdown("""
 <style>
+    /* Remove ALL background boxes from input containers - comprehensive targeting */
     [data-testid="stTextInput"],
     [data-testid="stNumberInput"],
     [data-testid="stSlider"],
-    [data-testid="stButton"] {
+    [data-testid="stButton"],
+    [data-testid="stHorizontalBlock"],
+    [data-testid="stVerticalBlock"],
+    [data-testid="stVerticalBlockBorderWrapper"],
+    [data-testid="column"],
+    [data-testid="column"] > div,
+    [data-testid="stElementContainer"],
+    .stTextInput, .stNumberInput, .stSlider, .stButton,
+    .element-container, .block-container {
         background-color: transparent !important;
         border: none !important;
+        box-shadow: none !important;
     }
-    .stTextInput, .stNumberInput, .stSlider, .stButton {
+    /* Target the blue wrapper divs specifically */
+    [data-testid="stVerticalBlockBorderWrapper"] > div,
+    [data-testid="stVerticalBlock"] > div,
+    div[data-testid="stVerticalBlockBorderWrapper"] {
         background-color: transparent !important;
         border: none !important;
+        box-shadow: none !important;
+        padding: 0 !important;
     }
+    /* Input field containers */
     div[data-baseweb="input"],
     div[data-baseweb="slider"],
-    button {
+    .stNumberInput > div,
+    .stTextInput > div,
+    .stNumberInput > div > div,
+    .stTextInput > div > div {
         background-color: transparent !important;
+    }
+    /* Number input +/- buttons - make them match input text color (black/dark) */
+    [data-testid="stNumberInput"] button,
+    .stNumberInput button,
+    [data-testid="stNumberInput-StepUp"],
+    [data-testid="stNumberInput-StepDown"] {
+        background-color: transparent !important;
+        border: none !important;
+        color: #FFFFFF !important;
+    }
+    [data-testid="stNumberInput"] button svg,
+    .stNumberInput button svg {
+        fill: #FFFFFF !important;
+        stroke: #FFFFFF !important;
+    }
+    /* Ensure step buttons are inline with the input */
+    [data-testid="stNumberInput"] > div {
+        display: flex !important;
+        align-items: center !important;
+    }
+    /* Remove border from container around inputs */
+    .stTextInput > div:first-child,
+    .stNumberInput > div:first-child,
+    .stSlider > div:first-child {
+        border: none !important;
+        background: transparent !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -4721,6 +4779,7 @@ if analyze_btn:
                 
                 # ===== VALUATION SNAPSHOT - SIMPLE & BULLETPROOF =====
                 st.markdown(f'<div style="color: {COLOR_ACCENT_1}; font-weight: 700; font-size: 1.5rem; margin: 1.5rem 0 1rem 0;">Valuation Snapshot</div>', unsafe_allow_html=True)
+                st.markdown(f'<div style="color: {COLOR_MAIN_TEXT}; font-weight: 500; font-size: 0.9rem; margin: 0 0 1rem 0; font-style: italic;">Fundamental valuation metrics: price ratios, yields, and analyst targets</div>', unsafe_allow_html=True)
                 
                 # Get fundamentals (already fetched earlier)
                 if not fundamentals:
@@ -4736,26 +4795,75 @@ if analyze_btn:
                 upside = fundamentals.get('upside_pct')
                 
                 # Count how many metrics we have
-                metrics_list = []
+                metrics_data = []
                 if pe is not None:
-                    metrics_list.append(('P/E Ratio', f'{pe:.1f}x', pe))
+                    # PE color: green if < 20, yellow if 20-30, red if > 30
+                    if pe < 15:
+                        pe_color = COLOR_POSITIVE
+                    elif pe < 25:
+                        pe_color = COLOR_ACCENT_1
+                    else:
+                        pe_color = COLOR_WARNING
+                    metrics_data.append(('P/E Ratio', f'{pe:.1f}x', pe, pe_color, 'Price-to-earnings ratio. Lower often indicates value.'))
+                
                 if peg is not None:
-                    metrics_list.append(('PEG Ratio', f'{peg:.2f}', peg))
+                    # PEG color: green if < 1.0, yellow if 1.0-2.0, red if > 2.0
+                    if peg < 1.0:
+                        peg_color = COLOR_POSITIVE
+                    elif peg < 2.0:
+                        peg_color = COLOR_ACCENT_1
+                    else:
+                        peg_color = COLOR_WARNING
+                    metrics_data.append(('PEG Ratio', f'{peg:.2f}', peg, peg_color, 'Price/Earnings to Growth. Lower indicates value relative to growth.'))
                 elif div_yield is not None:
                     # div_yield is already converted to percentage in get_fundamental_data
-                    metrics_list.append(('Dividend Yield', f'{div_yield:.2f}%', div_yield))
-                if ev is not None:
-                    metrics_list.append(('EV/EBITDA', f'{ev:.1f}x', ev))
-                if target is not None and current_price is not None:
-                    metrics_list.append(('Target Price', f'${target:,.2f}', target))
+                    div_color = COLOR_POSITIVE if div_yield > 0.5 else COLOR_ACCENT_1
+                    metrics_data.append(('Dividend Yield', f'{div_yield:.2f}%', div_yield, div_color, 'Annual dividend as % of stock price.'))
                 
-                # Display metrics or message
-                if len(metrics_list) > 0:
-                    # Build simple grid
-                    cols = st.columns(len(metrics_list))
-                    for idx, (label, value, raw_val) in enumerate(metrics_list):
-                        with cols[idx]:
-                            st.metric(label=label, value=value)
+                if ev is not None:
+                    # EV/EBITDA color: green if < 12, yellow if 12-20, red if > 20
+                    if ev < 10:
+                        ev_color = COLOR_POSITIVE
+                    elif ev < 18:
+                        ev_color = COLOR_ACCENT_1
+                    else:
+                        ev_color = COLOR_WARNING
+                    metrics_data.append(('EV/EBITDA', f'{ev:.1f}x', ev, ev_color, 'Enterprise Value to EBITDA. Lower often indicates value.'))
+                
+                if target is not None and current_price is not None:
+                    upside_pct = ((target - current_price) / current_price) * 100
+                    target_color = COLOR_POSITIVE if upside_pct > 0 else COLOR_NEGATIVE
+                    metrics_data.append(('Target Price', f'${target:,.0f}', target, target_color, f'Analyst consensus target price ({upside_pct:+.1f}% upside).'))
+                
+                # Display metrics with styled grid (similar to Forecast Overview)
+                if len(metrics_data) > 0:
+                    # Build grid items HTML
+                    grid_items_html = ""
+                    for label, value, raw_val, color, tooltip in metrics_data:
+                        grid_items_html += f"""
+                            <div>
+                                <div style="color: {COLOR_SECONDARY_TEXT}; font-size: 0.9rem; margin-bottom: 0.5rem; font-weight: 500;">
+                                    <span class="metric-tooltip">
+                                        {label}
+                                        <span class="tooltip-icon">ℹ</span>
+                                        <span class="tooltip-text">{tooltip}</span>
+                                    </span>
+                                </div>
+                                <div style="color: {color}; font-size: 1.8rem; font-weight: 700;">{value}</div>
+                            </div>
+                        """
+                    
+                    # Calculate grid columns based on number of metrics
+                    n_cols = min(len(metrics_data), 4)
+                    grid_template = ' '.join(['1fr'] * n_cols)
+                    
+                    st.markdown(f"""
+                    <div style="background: linear-gradient(135deg, {COLOR_BG_CARD} 0%, rgba(0, 180, 216, 0.08) 100%); padding: 1.5rem; border-radius: 10px; border: 1px solid rgba(0, 180, 216, 0.3); margin-bottom: 1.5rem;">
+                        <div style="display: grid; grid-template-columns: {grid_template}; gap: 2rem; text-align: center;">
+                            {grid_items_html}
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
                 else:
                     st.info("📊 Valuation metrics not currently available for this ticker.")
                 
