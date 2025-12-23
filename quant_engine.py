@@ -1598,7 +1598,7 @@ def get_price_data(ticker: str) -> Tuple[Optional[DataFrame], Optional[DataFrame
         # Retry only on rate limits - not a global throttle
         hist = None
         max_retries = 4
-        initial_backoff = 0.5
+        initial_backoff = 2.0  # Start with 2 seconds for rate limits
         
         for attempt in range(max_retries):
             try:
@@ -1617,11 +1617,11 @@ def get_price_data(ticker: str) -> Tuple[Optional[DataFrame], Optional[DataFrame
                 
             except Exception as e:
                 error_str = str(e).lower()
-                is_rate_limit = 'rate' in error_str or 'too many' in error_str
+                is_rate_limit = 'rate' in error_str or 'too many' in error_str or '429' in error_str
                 
                 if is_rate_limit and attempt < max_retries - 1:
-                    # Rate limit - wait and retry
-                    backoff_time = initial_backoff * (2 ** attempt) + random.uniform(0, 0.5)
+                    # Rate limit - wait longer and retry with exponential backoff
+                    backoff_time = initial_backoff * (2 ** attempt) + random.uniform(0.5, 2.0)
                     logger.warning(f"Rate limit on attempt {attempt + 1}/{max_retries} for {ticker}. Retrying in {backoff_time:.1f}s...")
                     time.sleep(backoff_time)
                 elif attempt == max_retries - 1:
@@ -4159,13 +4159,21 @@ show_session_info()
 # Hide blue boxes behind input parameters
 st.markdown("""
 <style>
-    .stTextInput > div:first-child,
-    .stNumberInput > div:first-child,
-    .stSlider > div:first-child,
-    .stButton > button {
+    [data-testid="stTextInput"],
+    [data-testid="stNumberInput"],
+    [data-testid="stSlider"],
+    [data-testid="stButton"] {
         background-color: transparent !important;
         border: none !important;
-        box-shadow: none !important;
+    }
+    .stTextInput, .stNumberInput, .stSlider, .stButton {
+        background-color: transparent !important;
+        border: none !important;
+    }
+    div[data-baseweb="input"],
+    div[data-baseweb="slider"],
+    button {
+        background-color: transparent !important;
     }
 </style>
 """, unsafe_allow_html=True)
