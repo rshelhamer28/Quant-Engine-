@@ -4107,7 +4107,9 @@ if analyze_btn:
                     raw_sector = info.get('sector', 'Technology')
                     if not industry or industry == 'N/A':
                         industry = info.get('industry', 'N/A')
-                except:
+                except Exception as e:
+                    # Silently handle rate limiting and other yfinance errors
+                    logger.debug(f"Could not fetch sector/industry from yfinance: {str(e)[:100]}")
                     pass
             
             # Final defaults
@@ -4542,7 +4544,9 @@ if analyze_btn:
                             fundamentals['ev_ebitda'] = info.get('enterpriseToEbitda')
                         if not fundamentals.get('target_price'):
                             fundamentals['target_price'] = info.get('targetMeanPrice') or info.get('targetMedianPrice')
-                    except:
+                    except Exception as e:
+                        # Silently handle rate limiting and other yfinance errors
+                        logger.debug(f"Could not fetch valuation metrics from yfinance: {str(e)[:100]}")
                         pass
                 
                 # Count metrics to determine grid columns dynamically
