@@ -1,0 +1,82 @@
+# Quant Engine Configuration File
+# Version: 1.0
+# Last Updated: 2025-12-22
+
+app:
+  name: "Quantitative Analytics Dashboard"
+  version: "1.0"
+  environment: ${ENV:ENVIRONMENT:development}  # development, staging, production
+  
+logging:
+  level: ${ENV:LOG_LEVEL:INFO}
+  directory: ${ENV:LOG_DIR:./logs}
+  max_size_mb: 10
+  backup_count: 5
+  # Log file format: quant_engine_HOSTNAME_TIMESTAMP.log
+  
+cache:
+  ttl_seconds: ${ENV:CACHE_TTL_SECONDS:300}
+  # Cache time-to-live: how long to keep cached data (seconds)
+  # Lower = more frequent updates (slower, fresher)
+  # Higher = fewer API calls (faster, but stale)
+  
+data:
+  price_history_period: ${ENV:PRICE_HISTORY_PERIOD:5y}
+  # Historical data to fetch: 2y, 5y, 10y, max
+  min_trading_days: ${ENV:MIN_TRADING_DAYS:20}
+  # Minimum trading days required for analysis
+  min_data_completeness: ${ENV:MIN_DATA_COMPLETENESS:0.70}
+  # Minimum data completeness (0.0-1.0): skip stocks with missing data
+  
+api:
+  yfinance:
+    timeout_seconds: ${ENV:YFINANCE_TIMEOUT:15}
+    # Timeout for yfinance API calls
+    retries: 3
+    backoff_factor: 0.5
+    
+  finnhub:
+    timeout_seconds: ${ENV:NEWS_API_TIMEOUT:10}
+    # Timeout for Finnhub API calls
+    api_url: ${ENV:FINNHUB_API_URL:https://finnhub.io/api/v1}
+    # API endpoint: change if Finnhub releases new version
+    api_key: ${ENV:FINNHUB_API_KEY}
+    # API key: REQUIRED for news sentiment
+    
+benchmark:
+  ticker: ${ENV:BENCHMARK_TICKER:^GSPC}
+  # Benchmark ticker: S&P 500 (^GSPC), Russell 2000 (^RUT), etc.
+  # Used for comparing stock performance
+  
+monte_carlo:
+  paths: ${ENV:MONTE_CARLO_PATHS:10000}
+  # Number of simulation paths for price forecasting
+  # Higher = more accurate but slower (10x slower = 10 paths/sec)
+  forecast_years: [1, 2, 5]
+  # Generate forecasts for these time horizons (years)
+  
+external_data:
+  # Path to external data files (can be absolute or relative)
+  sentiment_dict: ${ENV:SENTIMENT_DICT_PATH:./data/sentiment_dict.json}
+  sector_pe_ratios: ${ENV:SECTOR_PE_PATH:./data/sector_pe_latest.json}
+  scoring_weights: ${ENV:SCORING_WEIGHTS_PATH:./data/scoring_weights.json}
+  
+  # Update frequencies (optional automation)
+  sentiment_dict_update_days: 30  # Update monthly
+  sector_pe_update_days: 7        # Update weekly
+  scoring_weights_update_days: 90 # Update quarterly
+  
+database:
+  cache_db: ${ENV:CACHE_DB_PATH:./data/price_cache.db}
+  # SQLite database for price caching
+  # Can be moved to remote database in production
+  
+monitoring:
+  track_fallback_usage: true
+  # Log when fallback data sources are used
+  track_cache_performance: true
+  # Log cache hit/miss rates
+  track_api_latency: true
+  # Log API response times for performance monitoring
+  alert_stale_data_days: 7
+  # Alert if sector P/E is older than N days

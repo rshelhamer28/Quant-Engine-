@@ -2053,7 +2053,21 @@ def get_fundamental_data(ticker, max_retries=5, initial_backoff=0.3):
             if industry and industry != 'N/A' and industry != 'None' and industry.strip():
                 result['industry'] = industry
             else:
-                result['industry'] = 'Unknown'
+                # Hard fallback: infer industry from sector
+                sector_industry_map = {
+                    'Technology': 'Software',
+                    'Healthcare': 'Pharmaceuticals',
+                    'Financials': 'Banks',
+                    'Consumer Cyclical': 'Retailers',
+                    'Consumer Defensive': 'Food & Beverage',
+                    'Industrials': 'Machinery',
+                    'Energy': 'Oil & Gas',
+                    'Utilities': 'Electric Utilities',
+                    'Real Estate': 'REITs',
+                    'Materials': 'Chemicals',
+                    'Communication Services': 'Media',
+                }
+                result['industry'] = sector_industry_map.get(result['sector'], 'Unknown')
             
             result['beta'] = _coerce_to_float(info.get('beta'))
             result['company_name'] = info.get('longName', ticker)
@@ -4073,18 +4087,7 @@ st.caption("Comprehensive analysis for stocks, ETFs, and index funds")
 # Display session info in sidebar (helpful for debugging)
 show_session_info()
 
-# --- INPUT SECTION WITH STYLED CONTAINER ---
-st.markdown("""
-<style>
-    .analysis-params-box {
-        background-color: rgba(0, 180, 216, 0.08);
-        border: 1px solid rgba(0, 180, 216, 0.2);
-        border-radius: 12px;
-        padding: 1.5rem;
-    }
-</style>
-""", unsafe_allow_html=True)
-
+# --- INPUT SECTION ---
 with st.container():
     st.markdown("""
     <div style="display: flex; align-items: flex-start; margin-bottom: 1.5rem;">
@@ -4773,10 +4776,13 @@ if analyze_btn:
                     </div>"""
                 
                 metrics_html += '</div></div>'
-                st.markdown(metrics_html, unsafe_allow_html=True)
                 
-                # Check if any metrics were actually displayed (using the boolean flags)
-                if metric_count == 0:
+                # Always display the metrics container - if any metrics exist, show them
+                # This gives users visibility into what data is available vs unavailable
+                if metric_count > 0:
+                    st.markdown(metrics_html, unsafe_allow_html=True)
+                else:
+                    # Only show unavailable message if truly no metrics at all
                     st.info(
                         f"📊 **Valuation data unavailable for {ticker}**\n\n"
                         "Valuation metrics (P/E, PEG, EV/EBITDA, Target Price) are not currently available. "
