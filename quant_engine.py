@@ -2100,10 +2100,25 @@ def get_fundamental_data(ticker, max_retries=5, initial_backoff=0.3):
     
     # Set sector from map if available, otherwise Unknown
     result['sector'] = ticker_sector_map.get(ticker.upper(), 'Unknown')
-    result['industry'] = 'Unknown'
+    
+    # Infer industry from sector using the same mapping as main extraction
+    sector_industry_map = {
+        'Technology': 'Software',
+        'Healthcare': 'Pharmaceuticals',
+        'Financials': 'Banks',
+        'Consumer Cyclical': 'Retailers',
+        'Consumer Defensive': 'Food & Beverage',
+        'Industrials': 'Machinery',
+        'Energy': 'Oil & Gas',
+        'Utilities': 'Electric Utilities',
+        'Real Estate': 'REITs',
+        'Materials': 'Chemicals',
+        'Communication Services': 'Media',
+    }
+    result['industry'] = sector_industry_map.get(result['sector'], 'Unknown')
     result['partial_data'] = True
     
-    logger.warning(f"Set sector for {ticker} to fallback: {result['sector']}")
+    logger.warning(f"Set sector for {ticker} to fallback: {result['sector']}, industry: {result['industry']}")
     
     return result
 
