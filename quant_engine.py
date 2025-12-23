@@ -62,8 +62,8 @@ try:
         DataValidation,
         RiskMetrics
     )
-except ImportError:
-    print("Warning: utilities.py not found. Using inline calculations.")
+except (ImportError, KeyError, ModuleNotFoundError):
+    print("Warning: utilities.py not found or inaccessible. Using inline calculations.")
     # Fallback definitions (minimal)
     def annualize_volatility(s):
         return s.std() * np.sqrt(252) if len(s) > 0 else 0
