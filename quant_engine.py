@@ -29,20 +29,6 @@ from collections import defaultdict
 from logging.handlers import RotatingFileHandler
 import re
 
-# Global request throttling to prevent Yahoo Finance rate limiting
-_last_yfinance_request_time = 0
-_request_throttle_seconds = 0.1  # Minimum 0.1 second between any yfinance requests (light throttle)
-
-def throttle_yfinance_request():
-    """Enforce global throttling across all yfinance requests"""
-    global _last_yfinance_request_time
-    now = time.time()
-    elapsed = now - _last_yfinance_request_time
-    if elapsed < _request_throttle_seconds:
-        wait_time = _request_throttle_seconds - elapsed
-        time.sleep(wait_time)
-    _last_yfinance_request_time = time.time()
-
 # Load environment variables from .env file
 load_dotenv()
 # Import authentication and session management (Phase 2 Multi-User)
@@ -1588,48 +1574,18 @@ def get_price_data(ticker: str) -> Tuple[Optional[DataFrame], Optional[DataFrame
     try:
         logger.info(f"Fetching price data for {ticker} ({PRICE_HISTORY_PERIOD})")
         
-        # Retry loop with exponential backoff for price data
-        hist = None
-        max_retries = 5
-        initial_backoff = 0.5
-        
-        for attempt in range(max_retries):
-            try:
-                # Enforce global throttling to prevent hammering Yahoo Finance
-                throttle_yfinance_request()
-                
-                # Use configurable timeout to prevent indefinite blocking
-                hist = yf.download(
-                    ticker,
-                    period=PRICE_HISTORY_PERIOD,
-                    interval="1d",
-                    progress=False,
-                    auto_adjust=True,
-                    timeout=YFINANCE_TIMEOUT,
-                    threads=False,
-                    group_by='column'
-                )
-                
-                # Success - break out of retry loop
-                logger.info(f"Downloaded data for {ticker}: type={type(hist).__name__}, shape={hist.shape if hasattr(hist, 'shape') else 'N/A'}")
-                break
-                
-            except Exception as e:
-                error_str = str(e).lower()
-                is_rate_limit = 'rate' in error_str or 'too many' in error_str
-                
-                if is_rate_limit and attempt < max_retries - 1:
-                    # Rate limit - exponential backoff with cap
-                    backoff_time = min(initial_backoff * (2 ** attempt) + random.uniform(0, 2), 30)
-                    logger.warning(f"Rate limit on attempt {attempt + 1}/{max_retries} for {ticker}. Retrying in {backoff_time:.1f}s...")
-                    time.sleep(backoff_time)
-                elif attempt == max_retries - 1:
-                    # Final attempt failed
-                    logger.error(f"Failed to fetch price data for {ticker} after {max_retries} attempts: {str(e)[:100]}")
-                    raise
-                else:
-                    # Other error on non-final attempt - retry with short delay
-                    time.sleep(0.5)
+        # Use configurable timeout - let yfinance handle retries internally
+        hist = yf.download(
+            ticker,
+            period=PRICE_HISTORY_PERIOD,
+            interval="1d",
+            progress=False,
+            auto_adjust=True,
+            timeout=YFINANCE_TIMEOUT,
+            threads=False,
+            group_by='column'
+        )
+        logger.info(f"Downloaded data for {ticker}: type={type(hist).__name__}, shape={hist.shape if hasattr(hist, 'shape') else 'N/A'}")
         
         # Handle case where yfinance returns a Series instead of DataFrame
         if hist is not None and hasattr(hist, 'name'):  # It's a Series
@@ -1646,9 +1602,6 @@ def get_price_data(ticker: str) -> Tuple[Optional[DataFrame], Optional[DataFrame
         for attempt in range(max_retries):
             try:
                 logger.info(f"Downloading benchmark {BENCHMARK_TICKER} (attempt {attempt + 1}/{max_retries})")
-                
-                # Enforce global throttling before benchmark download
-                throttle_yfinance_request()
                 
                 market = yf.download(
                     BENCHMARK_TICKER,
@@ -1873,11 +1826,11 @@ def _validate_numeric_value(
         logger.warning(f"Cannot convert {name}={value} to float")
         return None
 
-def get_fundamental_data(ticker, max_retries=7, initial_backoff=0.5):
-    """Robust fundamental data fetching with aggressive retry logic for ANY US stock/ETF/index"""
+def get_fundamental_data(ticker, max_retries=3, initial_backoff=0.5):
+    """Fetch fundamental data for ANY US stock/ETF/index"""
     import random
     
-    # Initialize result dict with all expected fields (always returns structured dict)
+    # Initialize result dict with all expected fields
     result = {
         'current_price': None,
         'target_price': None,
@@ -1898,7 +1851,7 @@ def get_fundamental_data(ticker, max_retries=7, initial_backoff=0.5):
         'partial_data': False
     }
     
-    # Step 1: AGGRESSIVE RETRY - Try to fetch from yfinance multiple times with exponential backoff
+    # Simple retry with SHORT backoff for fundamentals
     info = None
     last_error = None
     
@@ -1906,10 +1859,7 @@ def get_fundamental_data(ticker, max_retries=7, initial_backoff=0.5):
         try:
             logger.info(f"Fetching fundamental data for {ticker} (attempt {attempt + 1}/{max_retries})")
             
-            # Enforce global throttling to prevent hammering Yahoo Finance
-            throttle_yfinance_request()
-            
-            # Simple direct call - no session parameter complexity
+            # Simple direct call - no throttling
             stock = yf.Ticker(ticker)
             info = stock.info
             
@@ -1921,18 +1871,11 @@ def get_fundamental_data(ticker, max_retries=7, initial_backoff=0.5):
         except Exception as e:
             last_error = e
             error_str = str(e).lower()
-            is_rate_limit = 'rate' in error_str or 'too many' in error_str or '429' in error_str or 'crumb' in error_str or '401' in error_str
             
-            if is_rate_limit and attempt < max_retries - 1:
-                # AGGRESSIVE backoff but cap at 30 seconds max (was 128s)
-                # Backoff: 0.5s → 1s → 2s → 4s → 8s → 16s → 30s (capped)
-                backoff_time = min(initial_backoff * (2 ** attempt) + random.uniform(0, 2), 30)
-                logger.warning(f"Rate limit on attempt {attempt + 1} for {ticker}. Retrying in {backoff_time:.1f}s...")
-                time.sleep(backoff_time)
-            elif attempt < max_retries - 1:
-                # Non-rate-limit error, still retry with shorter backoff
-                backoff_time = 0.5 + random.uniform(0, 1)
-                logger.debug(f"Error on attempt {attempt + 1} for {ticker}: {str(e)[:80]}. Retrying in {backoff_time:.1f}s...")
+            if attempt < max_retries - 1:
+                # Quick retry on any error - 0.5s to 1.5s only
+                backoff_time = 0.5 + (attempt * 0.5) + random.uniform(0, 0.5)
+                logger.debug(f"Retry {attempt + 1}/{max_retries} for {ticker} in {backoff_time:.1f}s...")
                 time.sleep(backoff_time)
             else:
                 # Final attempt failed
