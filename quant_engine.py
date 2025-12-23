@@ -4127,8 +4127,10 @@ if analyze_btn:
                 "Methodology & Disclaimers"
             ])
             
-            # Generate timestamp for all tabs
-            timestamp_str = datetime.now().strftime("%b %d, %Y • %I:%M %p")
+            # Generate timestamp for all tabs - use Eastern Time (market hours)
+            import pytz
+            eastern = pytz.timezone('US/Eastern')
+            timestamp_str = datetime.now(eastern).strftime("%b %d, %Y • %I:%M %p")
             
             # =================================================================
             # TAB 1: EXECUTIVE SUMMARY
