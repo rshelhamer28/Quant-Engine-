@@ -4090,7 +4090,18 @@ if analyze_btn:
             backtest_metrics = get_historical_backtest_metrics(metrics)
             
             # SECTOR PEERS WITH PARTNERSHIPS
-            sector = fundamentals.get('sector', 'Technology') if fundamentals else 'Technology'
+            # Get sector from fundamentals
+            raw_sector = fundamentals.get('sector', 'Technology') if fundamentals else 'Technology'
+            industry = fundamentals.get('industry', 'N/A') if fundamentals else 'N/A'
+            
+            # Normalize sector name - this will be done in get_sector_peers too, but we need it for display
+            sector_mapping = {
+                'Health Care': 'Healthcare',
+                'Financial': 'Financials',
+                'Industrial': 'Industrials',
+            }
+            sector = sector_mapping.get(raw_sector, raw_sector)
+            
             peers, partnerships = get_sector_peers(ticker, sector)
             
             # =================================================================
