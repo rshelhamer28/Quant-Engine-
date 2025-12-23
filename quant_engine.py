@@ -31,7 +31,7 @@ import re
 
 # Global request throttling to prevent Yahoo Finance rate limiting
 _last_yfinance_request_time = 0
-_request_throttle_seconds = 1.0  # Minimum 1 second between any yfinance requests
+_request_throttle_seconds = 0.1  # Minimum 0.1 second between any yfinance requests (light throttle)
 
 def throttle_yfinance_request():
     """Enforce global throttling across all yfinance requests"""
@@ -1838,7 +1838,7 @@ def _validate_numeric_value(
         logger.warning(f"Cannot convert {name}={value} to float")
         return None
 
-def get_fundamental_data(ticker, max_retries=7, initial_backoff=2.0):
+def get_fundamental_data(ticker, max_retries=7, initial_backoff=0.5):
     """Robust fundamental data fetching with aggressive retry logic for ANY US stock/ETF/index"""
     import random
     
@@ -1889,14 +1889,14 @@ def get_fundamental_data(ticker, max_retries=7, initial_backoff=2.0):
             is_rate_limit = 'rate' in error_str or 'too many' in error_str or '429' in error_str or 'crumb' in error_str or '401' in error_str
             
             if is_rate_limit and attempt < max_retries - 1:
-                # MUCH MORE AGGRESSIVE backoff for rate limits
-                # Yahoo Finance needs LONG waits: 2s → 4s → 8s → 16s → 32s → 64s → 128s
-                backoff_time = initial_backoff * (2 ** attempt) + random.uniform(0, 3)
+                # AGGRESSIVE backoff but cap at 30 seconds max (was 128s)
+                # Backoff: 0.5s → 1s → 2s → 4s → 8s → 16s → 30s (capped)
+                backoff_time = min(initial_backoff * (2 ** attempt) + random.uniform(0, 2), 30)
                 logger.warning(f"Rate limit on attempt {attempt + 1} for {ticker}. Retrying in {backoff_time:.1f}s...")
                 time.sleep(backoff_time)
             elif attempt < max_retries - 1:
                 # Non-rate-limit error, still retry with shorter backoff
-                backoff_time = 1.0 + random.uniform(0, 2)
+                backoff_time = 0.5 + random.uniform(0, 1)
                 logger.debug(f"Error on attempt {attempt + 1} for {ticker}: {str(e)[:80]}. Retrying in {backoff_time:.1f}s...")
                 time.sleep(backoff_time)
             else:
