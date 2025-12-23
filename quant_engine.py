@@ -4221,74 +4221,68 @@ st.markdown("""
     /* Input field containers */
     div[data-baseweb="input"],
     div[data-baseweb="slider"],
-    .stNumberInput > div,
     .stTextInput > div,
-    .stNumberInput > div > div,
     .stTextInput > div > div {
         background-color: transparent !important;
     }
     
-    /* ========== NUMBER INPUT - SINGLE UNIFIED WHITE BOX ========== */
-    /* Remove ALL backgrounds first */
+    /* ========== NUMBER INPUT - ONE WHITE BOX WITH +/- INSIDE ========== */
+    /* NUKE everything to transparent first */
     [data-testid="stNumberInput"],
-    [data-testid="stNumberInput"] > div,
-    [data-testid="stNumberInput"] > div > div,
-    [data-testid="stNumberInput"] > div > div > div,
+    [data-testid="stNumberInput"] *,
     .stNumberInput,
-    .stNumberInput > div,
-    .stNumberInput > div > div,
-    .stNumberInput > div > div > div {
+    .stNumberInput * {
         background-color: transparent !important;
         background: transparent !important;
         border: none !important;
         box-shadow: none !important;
     }
-    /* The baseweb input container - THIS is the one unified box */
-    [data-testid="stNumberInput"] [data-baseweb="input"],
-    .stNumberInput [data-baseweb="input"] {
+    /* The OUTER container becomes the single white box */
+    [data-testid="stNumberInput"] > div,
+    .stNumberInput > div {
         background-color: #FFFFFF !important;
         background: #FFFFFF !important;
         border: 1px solid #CCCCCC !important;
         border-radius: 6px !important;
+        display: flex !important;
+        align-items: center !important;
+        padding: 0 8px !important;
     }
-    /* Input field styling */
+    /* Input field - transparent, inside the white box */
     [data-testid="stNumberInput"] input,
     .stNumberInput input {
         background-color: transparent !important;
         background: transparent !important;
         border: none !important;
         color: #000000 !important;
+        font-size: 14px !important;
+        flex: 1 !important;
     }
-    /* +/- buttons - same color as number, not bold */
+    /* +/- buttons - same font style as number, on right side */
     [data-testid="stNumberInput"] button,
     .stNumberInput button {
         background-color: transparent !important;
         background: transparent !important;
         border: none !important;
         box-shadow: none !important;
-        color: #000000 !important;
-        font-weight: normal !important;
+        color: #666666 !important;
+        font-weight: 400 !important;
+        padding: 4px !important;
+        margin: 0 !important;
     }
     [data-testid="stNumberInput"] button svg,
     .stNumberInput button svg {
-        fill: #000000 !important;
-        stroke: #000000 !important;
-        color: #000000 !important;
-        stroke-width: 1px !important;
-    }
-    /* Remove any pseudo-elements */
-    [data-testid="stNumberInput"] button::before,
-    [data-testid="stNumberInput"] button::after,
-    .stNumberInput button::before,
-    .stNumberInput button::after {
-        display: none !important;
-        background: transparent !important;
+        fill: #666666 !important;
+        stroke: #666666 !important;
+        color: #666666 !important;
+        stroke-width: 1.5px !important;
+        width: 14px !important;
+        height: 14px !important;
     }
     /* ========== END NUMBER INPUT FIX ========== */
     
     /* Remove border from container around inputs */
     .stTextInput > div:first-child,
-    .stNumberInput > div:first-child,
     .stSlider > div:first-child {
         border: none !important;
         background: transparent !important;
