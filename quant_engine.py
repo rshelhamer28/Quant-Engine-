@@ -1824,8 +1824,8 @@ def _validate_numeric_value(
         logger.warning(f"Cannot convert {name}={value} to float")
         return None
 
-def get_fundamental_data(ticker, max_retries=3, initial_backoff=1.0):
-    """Enhanced fundamental data with robust retry logic and comprehensive fallbacks"""
+def get_fundamental_data(ticker, max_retries=5, initial_backoff=0.5):
+    """Robust fundamental data fetching with aggressive retry logic for ANY US stock/ETF/index"""
     import random
     
     # Initialize result dict with all expected fields (always returns structured dict)
@@ -1849,73 +1849,10 @@ def get_fundamental_data(ticker, max_retries=3, initial_backoff=1.0):
         'partial_data': False
     }
     
-    # Comprehensive ticker defaults covering major stocks and sectors
-    ticker_defaults = {
-        # Tech
-        'AAPL': {'sector': 'Technology', 'industry': 'Consumer Electronics'},
-        'MSFT': {'sector': 'Technology', 'industry': 'Software'},
-        'GOOGL': {'sector': 'Technology', 'industry': 'Internet Services'},
-        'AMZN': {'sector': 'Consumer Cyclical', 'industry': 'Internet Retail'},
-        'NVDA': {'sector': 'Technology', 'industry': 'Semiconductors'},
-        'META': {'sector': 'Technology', 'industry': 'Internet Services'},
-        'INTC': {'sector': 'Technology', 'industry': 'Semiconductors'},
-        'AMD': {'sector': 'Technology', 'industry': 'Semiconductors'},
-        'ORCL': {'sector': 'Technology', 'industry': 'Software'},
-        'CSCO': {'sector': 'Technology', 'industry': 'Networking'},
-        # Automotive
-        'TSLA': {'sector': 'Consumer Cyclical', 'industry': 'Auto Manufacturers'},
-        'GM': {'sector': 'Consumer Cyclical', 'industry': 'Auto Manufacturers'},
-        'F': {'sector': 'Consumer Cyclical', 'industry': 'Auto Manufacturers'},
-        'TM': {'sector': 'Consumer Cyclical', 'industry': 'Auto Manufacturers'},
-        'HMC': {'sector': 'Consumer Cyclical', 'industry': 'Auto Manufacturers'},
-        # Healthcare/Pharma
-        'JNJ': {'sector': 'Healthcare', 'industry': 'Pharmaceuticals'},
-        'PFE': {'sector': 'Healthcare', 'industry': 'Pharmaceuticals'},
-        'MRK': {'sector': 'Healthcare', 'industry': 'Pharmaceuticals'},
-        'ABT': {'sector': 'Healthcare', 'industry': 'Diversified Healthcare'},
-        'UNH': {'sector': 'Healthcare', 'industry': 'Healthcare'},
-        'LLY': {'sector': 'Healthcare', 'industry': 'Pharmaceuticals'},
-        # Financials
-        'JPM': {'sector': 'Financials', 'industry': 'Banks'},
-        'BAC': {'sector': 'Financials', 'industry': 'Banks'},
-        'WFC': {'sector': 'Financials', 'industry': 'Banks'},
-        'GS': {'sector': 'Financials', 'industry': 'Investment Banking'},
-        'MS': {'sector': 'Financials', 'industry': 'Investment Banking'},
-        'BLK': {'sector': 'Financials', 'industry': 'Asset Management'},
-        'SCHW': {'sector': 'Financials', 'industry': 'Brokerage'},
-        # Consumer
-        'WMT': {'sector': 'Consumer Staples', 'industry': 'Retail'},
-        'COST': {'sector': 'Consumer Staples', 'industry': 'Retail'},
-        'MCD': {'sector': 'Consumer Discretionary', 'industry': 'Restaurants'},
-        'NKE': {'sector': 'Consumer Discretionary', 'industry': 'Apparel'},
-        'SBUX': {'sector': 'Consumer Discretionary', 'industry': 'Restaurants'},
-        # Energy/Materials/Metals
-        'XOM': {'sector': 'Energy', 'industry': 'Oil & Gas'},
-        'CVX': {'sector': 'Energy', 'industry': 'Oil & Gas'},
-        'COP': {'sector': 'Energy', 'industry': 'Oil & Gas'},
-        'MMP': {'sector': 'Energy', 'industry': 'Pipeline'},
-        'FCX': {'sector': 'Materials', 'industry': 'Copper Mining'},
-        'CLF': {'sector': 'Materials', 'industry': 'Steel'},
-        'TMC': {'sector': 'Materials', 'industry': 'Diversified Metals & Mining'},
-        'AA': {'sector': 'Materials', 'industry': 'Aluminum'},
-        'NEM': {'sector': 'Materials', 'industry': 'Gold Mining'},
-        'GLD': {'sector': 'Materials', 'industry': 'Gold'},
-        'SLV': {'sector': 'Materials', 'industry': 'Silver'},
-        # Industrial
-        'BA': {'sector': 'Industrials', 'industry': 'Aerospace & Defense'},
-        'CAT': {'sector': 'Industrials', 'industry': 'Machinery'},
-        'MMM': {'sector': 'Industrials', 'industry': 'Diversified Manufacturing'},
-        'GE': {'sector': 'Industrials', 'industry': 'Diversified Manufacturing'},
-        'RTX': {'sector': 'Industrials', 'industry': 'Aerospace & Defense'},
-        # Utilities & Real Estate
-        'NEE': {'sector': 'Utilities', 'industry': 'Utilities'},
-        'DUK': {'sector': 'Utilities', 'industry': 'Utilities'},
-        'SO': {'sector': 'Utilities', 'industry': 'Utilities'},
-        'VNQ': {'sector': 'Real Estate', 'industry': 'REIT'},
-    }
-    
-    # Step 1: Try to fetch from yfinance with retry logic
+    # Step 1: AGGRESSIVE RETRY - Try to fetch from yfinance multiple times with long backoff
     info = None
+    last_error = None
+    
     for attempt in range(max_retries):
         try:
             logger.info(f"Fetching fundamental data for {ticker} (attempt {attempt + 1}/{max_retries})")
@@ -1924,32 +1861,30 @@ def get_fundamental_data(ticker, max_retries=3, initial_backoff=1.0):
             
             # Validate ticker info schema
             validate_ticker_info(info, ticker)
-            logger.info(f"Successfully fetched fundamental data for {ticker}")
+            logger.info(f"✓ Successfully fetched fundamental data for {ticker}")
             break  # Exit loop on success
             
         except Exception as e:
+            last_error = e
             error_str = str(e).lower()
-            is_rate_limit = 'rate' in error_str or 'too many' in error_str
+            is_rate_limit = 'rate' in error_str or 'too many' in error_str or '429' in error_str
             
             if is_rate_limit and attempt < max_retries - 1:
-                # Exponential backoff with jitter
-                backoff_time = initial_backoff * (2 ** attempt) + random.uniform(0, 1)
-                logger.warning(f"Rate limit hit for {ticker} (attempt {attempt + 1}/{max_retries}). Retrying in {backoff_time:.1f}s...")
+                # Exponential backoff with jitter for rate limits
+                # More aggressive: 0.5s → 1.5s → 4.5s → 13.5s → 40.5s
+                backoff_time = initial_backoff * (3 ** attempt) + random.uniform(0, 2)
+                logger.warning(f"Rate limit on attempt {attempt + 1} for {ticker}. Retrying in {backoff_time:.1f}s...")
                 time.sleep(backoff_time)
-                # Continue to next iteration
+            elif attempt < max_retries - 1:
+                # Non-rate-limit error, still retry with shorter backoff
+                backoff_time = 0.5 + random.uniform(0, 1)
+                logger.debug(f"Error on attempt {attempt + 1} for {ticker}: {str(e)[:80]}. Retrying in {backoff_time:.1f}s...")
+                time.sleep(backoff_time)
             else:
-                # Final attempt failed or not a rate limit error
-                if is_rate_limit:
-                    logger.warning(f"Rate limit persisted for {ticker} after {max_retries} attempts - using fallback data")
-                else:
-                    error_type = SafeErrorHandler.log_exception(e, "get_fundamental_data", ticker)
-                    safe_msg = SafeErrorHandler.safe_error_message(error_type)
-                    result['fetch_error'] = safe_msg
-                    logger.debug(f"Non-rate-limit error fetching fundamentals for {ticker}: {str(e)[:100]}")
-                # Don't retry further
-                break
+                # Final attempt failed
+                logger.error(f"Failed to fetch fundamentals for {ticker} after {max_retries} attempts: {str(e)[:100]}")
     
-    # Step 2: If we got data, extract it; otherwise use fallbacks
+    # Step 2: Extract data from successful fetch
     if info is not None:
         try:
             # Safely extract current price from multiple fields
@@ -2045,28 +1980,28 @@ def get_fundamental_data(ticker, max_retries=3, initial_backoff=1.0):
                 else:
                     result['market_cap_display'] = f"${market_cap:,.0f}"
             
-            # Extract sector and industry from API response
+            # Extract sector and industry from API response (PRIMARY SOURCE)
             sector = info.get('sector')
             industry = info.get('industry')
             
+            logger.debug(f"Raw sector/industry from API for {ticker}: sector={sector}, industry={industry}")
+            
             # Validate and set sector (never return None)
-            if sector and sector != 'N/A' and sector != 'None':
+            if sector and sector != 'N/A' and sector != 'None' and sector.strip():
                 result['sector'] = sector
-            elif ticker in ticker_defaults:
-                result['sector'] = ticker_defaults[ticker]['sector']
             else:
-                result['sector'] = 'Technology'
+                result['sector'] = 'Unknown'
             
             # Validate and set industry (never return None)
-            if industry and industry != 'N/A' and industry != 'None':
+            if industry and industry != 'N/A' and industry != 'None' and industry.strip():
                 result['industry'] = industry
-            elif ticker in ticker_defaults:
-                result['industry'] = ticker_defaults[ticker]['industry']
             else:
                 result['industry'] = 'Unknown'
             
             result['beta'] = _coerce_to_float(info.get('beta'))
             result['company_name'] = info.get('longName', ticker)
+            
+            logger.info(f"✓ Extracted data for {ticker}: sector={result['sector']}, industry={result['industry']}, pe={result['pe_ratio']}, target={result['target_price']}")
             
             # Track data completeness
             non_null_fields = sum(1 for v in result.values() if v is not None and v != 'N/A')
@@ -2078,19 +2013,14 @@ def get_fundamental_data(ticker, max_retries=3, initial_backoff=1.0):
         
         except Exception as e:
             logger.error(f"Error processing fundamental data for {ticker}: {str(e)[:100]}")
-            # Fall through to defaults
+            # Fall through to final defaults
     
-    # Step 3: Fallback to defaults (used when API fails or returns no data)
-    if ticker in ticker_defaults:
-        result['sector'] = ticker_defaults[ticker]['sector']
-        result['industry'] = ticker_defaults[ticker]['industry']
-        logger.info(f"Using default sector/industry for {ticker}: {result['sector']}/{result['industry']}")
-    else:
-        result['sector'] = 'Technology'
-        result['industry'] = 'Unknown'
-        logger.warning(f"No data and no defaults for {ticker}, using generic Technology/Unknown")
-    
+    # Step 3: Final fallback - when ALL retries exhausted (should be rare)
+    logger.warning(f"Using fallback for {ticker} after all retries exhausted")
+    result['sector'] = 'Unknown'
+    result['industry'] = 'Unknown'
     result['partial_data'] = True
+    
     return result
 
 def analyze_financial_sentiment(text):
@@ -4215,60 +4145,22 @@ if analyze_btn:
             # HISTORICAL BACKTEST METRICS
             backtest_metrics = get_historical_backtest_metrics(metrics)
             
-            # SECTOR PEERS WITH PARTNERSHIPS
-            # Get sector from fundamentals - Already has defensive coding with fallbacks
-            raw_sector = None
-            industry = None
+            # SECTOR & INDUSTRY - Use data from fundamentals (already fetched with retry logic)
+            # The new get_fundamental_data() function ensures sector/industry are always valid
+            sector = fundamentals.get('sector', 'Unknown') if fundamentals else 'Unknown'
+            industry = fundamentals.get('industry', 'Unknown') if fundamentals else 'Unknown'
             
-            # Try fundamentals first (which now has fallbacks built-in)
-            if fundamentals and isinstance(fundamentals, dict):
-                raw_sector = fundamentals.get('sector')
-                industry = fundamentals.get('industry')
-                logger.info(f"Sector/Industry from fundamentals: {raw_sector}/{industry}")
-            
-            # Fallback: fetch directly from yfinance if still missing (should be rare with new logic)
-            if not raw_sector or raw_sector == 'N/A' or raw_sector is None:
-                try:
-                    logger.info(f"Attempting secondary fetch for sector data (raw_sector={raw_sector})")
-                    stock = yf.Ticker(ticker)
-                    info = stock.info
-                    fetched_sector = info.get('sector')
-                    if fetched_sector and fetched_sector != 'N/A':
-                        raw_sector = fetched_sector
-                        logger.info(f"Successfully fetched sector from yfinance: {raw_sector}")
-                except Exception as e:
-                    # Silently handle rate limiting and other yfinance errors
-                    logger.debug(f"Could not fetch sector/industry from yfinance: {str(e)[:100]}")
-                    pass
-            
-            if not industry or industry == 'N/A' or industry is None:
-                try:
-                    stock = yf.Ticker(ticker)
-                    info = stock.info
-                    fetched_industry = info.get('industry')
-                    if fetched_industry and fetched_industry != 'N/A':
-                        industry = fetched_industry
-                        logger.info(f"Successfully fetched industry from yfinance: {industry}")
-                except Exception:
-                    pass
-            
-            # Final defaults - always provide something, never None or 'N/A'
-            if not raw_sector or raw_sector == 'N/A' or raw_sector is None:
-                raw_sector = 'Technology'
-                logger.info(f"Using default sector: {raw_sector}")
-            if not industry or industry == 'N/A' or industry is None:
-                industry = 'Unknown'
-                logger.info(f"Using default industry: {industry}")
-            
-            # Normalize sector name BEFORE display
+            # Normalize sector name for consistency
             sector_mapping = {
                 'Health Care': 'Healthcare',
                 'Financial': 'Financials',
                 'Industrial': 'Industrials',
             }
-            sector = sector_mapping.get(raw_sector, raw_sector)
-            logger.info(f"Final sector/industry for display: {sector}/{industry}")
+            sector = sector_mapping.get(sector, sector)
             
+            logger.info(f"Using sector/industry for {ticker}: {sector}/{industry}")
+            
+            # Get sector peers based on ACTUAL sector data
             peers, partnerships = get_sector_peers(ticker, sector)
             
             # =================================================================
@@ -4711,13 +4603,13 @@ if analyze_btn:
                         pass
                 
                 # Count metrics to determine grid columns dynamically
-                # Use > 0 check for numeric values to exclude None and 0
+                # Check if metrics exist (not None and not 'N/A')
                 metric_count = 0
-                has_pe = fundamentals and fundamentals.get('pe_ratio') is not None and fundamentals.get('pe_ratio') > 0
-                has_peg = fundamentals and fundamentals.get('peg_ratio') is not None and fundamentals.get('peg_ratio') > 0
-                has_div = fundamentals and fundamentals.get('dividend_yield') is not None and fundamentals.get('dividend_yield') > 0
-                has_ev = fundamentals and fundamentals.get('ev_ebitda') is not None and fundamentals.get('ev_ebitda') > 0
-                has_target = fundamentals and fundamentals.get('target_price') is not None and fundamentals.get('target_price') > 0
+                has_pe = fundamentals and fundamentals.get('pe_ratio') is not None
+                has_peg = fundamentals and fundamentals.get('peg_ratio') is not None
+                has_div = fundamentals and fundamentals.get('dividend_yield') is not None
+                has_ev = fundamentals and fundamentals.get('ev_ebitda') is not None
+                has_target = fundamentals and fundamentals.get('target_price') is not None
                 
                 if has_pe:
                     metric_count += 1
