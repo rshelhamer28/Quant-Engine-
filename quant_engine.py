@@ -4090,23 +4090,31 @@ if analyze_btn:
             backtest_metrics = get_historical_backtest_metrics(metrics)
             
             # SECTOR PEERS WITH PARTNERSHIPS
-            # Get sector from fundamentals - DEFENSIVE CODING
+            # Get sector from fundamentals - DEFENSIVE CODING with yfinance fallback
+            raw_sector = None
+            industry = None
+            
+            # Try fundamentals first
             if fundamentals and isinstance(fundamentals, dict):
                 raw_sector = fundamentals.get('sector')
                 industry = fundamentals.get('industry')
-                logger.info(f"DEBUG: fundamentals dict found - sector={raw_sector}, industry={industry}")
-            else:
-                raw_sector = None
-                industry = None
-                logger.info(f"DEBUG: fundamentals not a dict or None - type={type(fundamentals)}")
             
-            # Defaults
+            # Fallback: fetch directly from yfinance if not in fundamentals
+            if not raw_sector or raw_sector == 'N/A':
+                try:
+                    stock = yf.Ticker(ticker)
+                    info = stock.info
+                    raw_sector = info.get('sector', 'Technology')
+                    if not industry or industry == 'N/A':
+                        industry = info.get('industry', 'N/A')
+                except:
+                    pass
+            
+            # Final defaults
             if not raw_sector:
                 raw_sector = 'Technology'
-                logger.info(f"DEBUG: Setting default sector=Technology")
             if not industry:
                 industry = 'N/A'
-                logger.info(f"DEBUG: Setting default industry=N/A")
             
             # Normalize sector name BEFORE display
             sector_mapping = {
@@ -4115,7 +4123,6 @@ if analyze_btn:
                 'Industrial': 'Industrials',
             }
             sector = sector_mapping.get(raw_sector, raw_sector)
-            logger.info(f"DEBUG: After normalization - raw_sector={raw_sector}, sector={sector}, industry={industry}")
             
             peers, partnerships = get_sector_peers(ticker, sector)
             
@@ -4146,7 +4153,6 @@ if analyze_btn:
                 col_header1, col_header2, col_header3 = st.columns([2, 1, 1])
                 
                 with col_header1:
-                    logger.info(f"DEBUG: About to display header - sector={sector}, industry={industry}")
                     st.markdown(f"""
                     <div style="margin-bottom: 1.5rem;">
                         <h1 style="color: {COLOR_MAIN_TEXT}; margin: 0; font-size: 2.5rem; font-weight: 700;">{ticker}</h1>
@@ -4521,6 +4527,24 @@ if analyze_btn:
                 # ===== TOP METRICS STRIP =====
                 st.markdown(f'<div style="color: {COLOR_ACCENT_1}; font-weight: 700; font-size: 1.5rem; margin: 1.5rem 0 1rem 0;">Valuation Snapshot</div>', unsafe_allow_html=True)
                 
+                # Ensure fundamentals has data - fetch from yfinance if needed
+                if not fundamentals or not fundamentals.get('pe_ratio'):
+                    try:
+                        stock = yf.Ticker(ticker)
+                        info = stock.info
+                        if not fundamentals:
+                            fundamentals = {}
+                        if not fundamentals.get('pe_ratio'):
+                            fundamentals['pe_ratio'] = info.get('trailingPE') or info.get('forwardPE')
+                        if not fundamentals.get('peg_ratio'):
+                            fundamentals['peg_ratio'] = info.get('pegRatio')
+                        if not fundamentals.get('ev_ebitda'):
+                            fundamentals['ev_ebitda'] = info.get('enterpriseToEbitda')
+                        if not fundamentals.get('target_price'):
+                            fundamentals['target_price'] = info.get('targetMeanPrice') or info.get('targetMedianPrice')
+                    except:
+                        pass
+                
                 # Count metrics to determine grid columns dynamically
                 metric_count = 0
                 if fundamentals and fundamentals.get('pe_ratio') is not None:
@@ -4531,8 +4555,6 @@ if analyze_btn:
                     metric_count += 1
                 if fundamentals and fundamentals.get('target_price') is not None:
                     metric_count += 1
-                
-                logger.info(f"DEBUG: Valuation Snapshot - metric_count={metric_count}, fundamentals keys={list(fundamentals.keys()) if fundamentals else 'None'}")
                 
                 # Set grid columns based on actual metric count (3 or 4)
                 grid_cols = f"1fr 1fr 1fr 1fr" if metric_count == 4 else "1fr 1fr 1fr"
