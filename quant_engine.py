@@ -4258,26 +4258,35 @@ st.markdown("""
         font-size: 14px !important;
         flex: 1 !important;
     }
-    /* +/- buttons - same font style as number, on right side */
+    /* +/- buttons - thin, same style as number text */
     [data-testid="stNumberInput"] button,
     .stNumberInput button {
         background-color: transparent !important;
         background: transparent !important;
         border: none !important;
         box-shadow: none !important;
-        color: #666666 !important;
-        font-weight: 400 !important;
-        padding: 4px !important;
+        color: #000000 !important;
+        font-weight: 300 !important;
+        padding: 2px !important;
         margin: 0 !important;
+    }
+    /* First button (minus) goes second, second button (plus) goes first */
+    [data-testid="stNumberInput"] button:first-of-type,
+    .stNumberInput button:first-of-type {
+        order: 2 !important;
+    }
+    [data-testid="stNumberInput"] button:last-of-type,
+    .stNumberInput button:last-of-type {
+        order: 1 !important;
     }
     [data-testid="stNumberInput"] button svg,
     .stNumberInput button svg {
-        fill: #666666 !important;
-        stroke: #666666 !important;
-        color: #666666 !important;
-        stroke-width: 1.5px !important;
-        width: 14px !important;
-        height: 14px !important;
+        fill: none !important;
+        stroke: #000000 !important;
+        color: #000000 !important;
+        stroke-width: 1px !important;
+        width: 12px !important;
+        height: 12px !important;
     }
     /* ========== END NUMBER INPUT FIX ========== */
     
