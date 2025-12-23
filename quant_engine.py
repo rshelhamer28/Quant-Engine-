@@ -4255,19 +4255,19 @@ st.markdown("""
         background: transparent !important;
         border: none !important;
         color: #000000 !important;
-        font-size: 14px !important;
+        font-size: 16px !important;
         flex: 1 !important;
     }
-    /* +/- buttons - thin, same style as number text */
+    /* +/- buttons - grey text style */
     [data-testid="stNumberInput"] button,
     .stNumberInput button {
         background-color: transparent !important;
         background: transparent !important;
         border: none !important;
         box-shadow: none !important;
-        color: #000000 !important;
-        font-weight: 300 !important;
-        padding: 2px !important;
+        color: #888888 !important;
+        font-weight: 400 !important;
+        padding: 2px 4px !important;
         margin: 0 !important;
     }
     /* First button (minus) goes second, second button (plus) goes first */
@@ -4279,12 +4279,12 @@ st.markdown("""
     .stNumberInput button:last-of-type {
         order: 1 !important;
     }
+    /* SVG icons - solid grey fill, no outline */
     [data-testid="stNumberInput"] button svg,
     .stNumberInput button svg {
-        fill: none !important;
-        stroke: #000000 !important;
-        color: #000000 !important;
-        stroke-width: 1px !important;
+        fill: #888888 !important;
+        stroke: none !important;
+        color: #888888 !important;
         width: 12px !important;
         height: 12px !important;
     }
