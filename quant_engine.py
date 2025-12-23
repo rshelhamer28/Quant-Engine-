@@ -4694,8 +4694,8 @@ if analyze_btn:
                 if peg is not None:
                     metrics_list.append(('PEG Ratio', f'{peg:.2f}', peg))
                 elif div_yield is not None:
-                    div_pct = div_yield * 100 if div_yield else 0
-                    metrics_list.append(('Dividend Yield', f'{div_pct:.2f}%', div_yield))
+                    # div_yield is already converted to percentage in get_fundamental_data
+                    metrics_list.append(('Dividend Yield', f'{div_yield:.2f}%', div_yield))
                 if ev is not None:
                     metrics_list.append(('EV/EBITDA', f'{ev:.1f}x', ev))
                 if target is not None and current_price is not None:
