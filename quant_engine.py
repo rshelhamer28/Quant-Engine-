@@ -4094,15 +4094,19 @@ if analyze_btn:
             if fundamentals and isinstance(fundamentals, dict):
                 raw_sector = fundamentals.get('sector')
                 industry = fundamentals.get('industry')
+                logger.info(f"DEBUG: fundamentals dict found - sector={raw_sector}, industry={industry}")
             else:
                 raw_sector = None
                 industry = None
+                logger.info(f"DEBUG: fundamentals not a dict or None - type={type(fundamentals)}")
             
             # Defaults
             if not raw_sector:
                 raw_sector = 'Technology'
+                logger.info(f"DEBUG: Setting default sector=Technology")
             if not industry:
                 industry = 'N/A'
+                logger.info(f"DEBUG: Setting default industry=N/A")
             
             # Normalize sector name BEFORE display
             sector_mapping = {
@@ -4111,6 +4115,7 @@ if analyze_btn:
                 'Industrial': 'Industrials',
             }
             sector = sector_mapping.get(raw_sector, raw_sector)
+            logger.info(f"DEBUG: After normalization - raw_sector={raw_sector}, sector={sector}, industry={industry}")
             
             peers, partnerships = get_sector_peers(ticker, sector)
             
@@ -4141,6 +4146,7 @@ if analyze_btn:
                 col_header1, col_header2, col_header3 = st.columns([2, 1, 1])
                 
                 with col_header1:
+                    logger.info(f"DEBUG: About to display header - sector={sector}, industry={industry}")
                     st.markdown(f"""
                     <div style="margin-bottom: 1.5rem;">
                         <h1 style="color: {COLOR_MAIN_TEXT}; margin: 0; font-size: 2.5rem; font-weight: 700;">{ticker}</h1>
@@ -4517,14 +4523,16 @@ if analyze_btn:
                 
                 # Count metrics to determine grid columns dynamically
                 metric_count = 0
-                if fundamentals and fundamentals.get('pe_ratio'):
+                if fundamentals and fundamentals.get('pe_ratio') is not None:
                     metric_count += 1
-                if fundamentals and (fundamentals.get('peg_ratio') or fundamentals.get('dividend_yield')):
+                if fundamentals and (fundamentals.get('peg_ratio') is not None or fundamentals.get('dividend_yield') is not None):
                     metric_count += 1
-                if fundamentals and fundamentals.get('ev_ebitda'):
+                if fundamentals and fundamentals.get('ev_ebitda') is not None:
                     metric_count += 1
-                if fundamentals and fundamentals.get('target_price'):
+                if fundamentals and fundamentals.get('target_price') is not None:
                     metric_count += 1
+                
+                logger.info(f"DEBUG: Valuation Snapshot - metric_count={metric_count}, fundamentals keys={list(fundamentals.keys()) if fundamentals else 'None'}")
                 
                 # Set grid columns based on actual metric count (3 or 4)
                 grid_cols = f"1fr 1fr 1fr 1fr" if metric_count == 4 else "1fr 1fr 1fr"
@@ -4532,7 +4540,7 @@ if analyze_btn:
                 metrics_html = f'<div style="background: linear-gradient(135deg, {COLOR_BG_CARD} 0%, rgba(39, 174, 96, 0.05) 100%); padding: 1.5rem; border-radius: 10px; border: 1px solid rgba(39, 174, 96, 0.2); margin-bottom: 1.5rem;"><div style="display: grid; grid-template-columns: {grid_cols}; gap: 2.5rem; text-align: center;">'
                 
                 # P/E Ratio
-                if fundamentals and fundamentals['pe_ratio']:
+                if fundamentals and fundamentals.get('pe_ratio') is not None:
                     pe_bg, pe_color = get_metric_box_colors('P/E Ratio', fundamentals['pe_ratio'])
                     pe_ratio_val = fundamentals['pe_ratio']
                     # Flag extremely high P/E ratios for data quality clarity
@@ -4550,7 +4558,7 @@ if analyze_btn:
                     </div>"""
                 
                 # PEG Ratio or Dividend Yield (fallback)
-                if fundamentals and fundamentals.get('peg_ratio'):
+                if fundamentals and fundamentals.get('peg_ratio') is not None:
                     peg_bg, peg_color = get_metric_box_colors('PEG Ratio', fundamentals['peg_ratio'])
                     metrics_html += f"""
                     <div>
@@ -4563,7 +4571,7 @@ if analyze_btn:
                         </div>
                         <div style="color: {peg_color}; font-size: 1.6rem; font-weight: 700;">{fundamentals['peg_ratio']:.2f}</div>
                     </div>"""
-                elif fundamentals and fundamentals.get('dividend_yield'):
+                elif fundamentals and fundamentals.get('dividend_yield') is not None:
                     # Fallback to dividend yield if PEG not available
                     div_yield = fundamentals['dividend_yield'] * 100
                     div_color = COLOR_POSITIVE if div_yield > 2 else COLOR_WARNING if div_yield > 0 else COLOR_SECONDARY_TEXT
