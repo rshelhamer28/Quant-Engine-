@@ -2128,6 +2128,10 @@ def get_fundamental_data(ticker, max_retries=5, initial_backoff=0.3):
     result['industry'] = sector_industry_map.get(result['sector'], 'Unknown')
     result['partial_data'] = True
     
+    # Ensure market_cap_display is set in fallback (in case it wasn't set earlier)
+    if 'market_cap_display' not in result or result['market_cap_display'] is None:
+        result['market_cap_display'] = 'N/A'
+    
     logger.warning(f"Set sector for {ticker} to fallback: {result['sector']}, industry: {result['industry']}")
     
     return result
