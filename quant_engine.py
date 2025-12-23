@@ -1574,18 +1574,42 @@ def get_price_data(ticker: str) -> Tuple[Optional[DataFrame], Optional[DataFrame
     try:
         logger.info(f"Fetching price data for {ticker} ({PRICE_HISTORY_PERIOD})")
         
-        # Use configurable timeout - let yfinance handle retries internally
-        hist = yf.download(
-            ticker,
-            period=PRICE_HISTORY_PERIOD,
-            interval="1d",
-            progress=False,
-            auto_adjust=True,
-            timeout=YFINANCE_TIMEOUT,
-            threads=False,
-            group_by='column'
-        )
-        logger.info(f"Downloaded data for {ticker}: type={type(hist).__name__}, shape={hist.shape if hasattr(hist, 'shape') else 'N/A'}")
+        # Retry only on rate limits - not a global throttle
+        hist = None
+        max_retries = 4
+        initial_backoff = 0.5
+        
+        for attempt in range(max_retries):
+            try:
+                hist = yf.download(
+                    ticker,
+                    period=PRICE_HISTORY_PERIOD,
+                    interval="1d",
+                    progress=False,
+                    auto_adjust=True,
+                    timeout=YFINANCE_TIMEOUT,
+                    threads=False,
+                    group_by='column'
+                )
+                logger.info(f"Downloaded data for {ticker}: type={type(hist).__name__}, shape={hist.shape if hasattr(hist, 'shape') else 'N/A'}")
+                break  # Success
+                
+            except Exception as e:
+                error_str = str(e).lower()
+                is_rate_limit = 'rate' in error_str or 'too many' in error_str
+                
+                if is_rate_limit and attempt < max_retries - 1:
+                    # Rate limit - wait and retry
+                    backoff_time = initial_backoff * (2 ** attempt) + random.uniform(0, 0.5)
+                    logger.warning(f"Rate limit on attempt {attempt + 1}/{max_retries} for {ticker}. Retrying in {backoff_time:.1f}s...")
+                    time.sleep(backoff_time)
+                elif attempt == max_retries - 1:
+                    # Final attempt
+                    logger.error(f"Failed to fetch price data for {ticker} after {max_retries} attempts: {str(e)[:100]}")
+                    raise
+                else:
+                    # Other error - quick retry
+                    time.sleep(0.1)
         
         # Handle case where yfinance returns a Series instead of DataFrame
         if hist is not None and hasattr(hist, 'name'):  # It's a Series
@@ -1826,8 +1850,8 @@ def _validate_numeric_value(
         logger.warning(f"Cannot convert {name}={value} to float")
         return None
 
-def get_fundamental_data(ticker, max_retries=3, initial_backoff=0.5):
-    """Fetch fundamental data for ANY US stock/ETF/index"""
+def get_fundamental_data(ticker, max_retries=5, initial_backoff=0.5):
+    """Fetch fundamental data for ANY US stock/ETF/index with selective rate limit retry"""
     import random
     
     # Initialize result dict with all expected fields
@@ -1851,7 +1875,7 @@ def get_fundamental_data(ticker, max_retries=3, initial_backoff=0.5):
         'partial_data': False
     }
     
-    # Simple retry with SHORT backoff for fundamentals
+    # Retry with smart backoff - only for rate limits, quick fail for other errors
     info = None
     last_error = None
     
@@ -1859,7 +1883,6 @@ def get_fundamental_data(ticker, max_retries=3, initial_backoff=0.5):
         try:
             logger.info(f"Fetching fundamental data for {ticker} (attempt {attempt + 1}/{max_retries})")
             
-            # Simple direct call - no throttling
             stock = yf.Ticker(ticker)
             info = stock.info
             
@@ -1871,12 +1894,18 @@ def get_fundamental_data(ticker, max_retries=3, initial_backoff=0.5):
         except Exception as e:
             last_error = e
             error_str = str(e).lower()
+            is_rate_limit = 'rate' in error_str or 'too many' in error_str or '429' in error_str
             
-            if attempt < max_retries - 1:
-                # Quick retry on any error - 0.5s to 1.5s only
-                backoff_time = 0.5 + (attempt * 0.5) + random.uniform(0, 0.5)
-                logger.debug(f"Retry {attempt + 1}/{max_retries} for {ticker} in {backoff_time:.1f}s...")
+            if is_rate_limit and attempt < max_retries - 1:
+                # Rate limit detected - wait and retry
+                # Sleep: 0.5s → 1s → 2s → 4s → 8s
+                backoff_time = initial_backoff * (2 ** attempt) + random.uniform(0, 0.5)
+                logger.warning(f"Rate limit on attempt {attempt + 1} for {ticker}. Retrying in {backoff_time:.1f}s...")
                 time.sleep(backoff_time)
+            elif not is_rate_limit and attempt < max_retries - 1:
+                # Other error - quick retry without long sleep
+                logger.debug(f"Error on attempt {attempt + 1} for {ticker}: {str(e)[:80]}. Retrying...")
+                time.sleep(0.1)
             else:
                 # Final attempt failed
                 logger.error(f"Failed to fetch fundamentals for {ticker} after {max_retries} attempts: {str(e)[:100]}")
