@@ -4090,11 +4090,21 @@ if analyze_btn:
             backtest_metrics = get_historical_backtest_metrics(metrics)
             
             # SECTOR PEERS WITH PARTNERSHIPS
-            # Get sector from fundamentals
-            raw_sector = fundamentals.get('sector', 'Technology') if fundamentals else 'Technology'
-            industry = fundamentals.get('industry', 'N/A') if fundamentals else 'N/A'
+            # Get sector from fundamentals - DEFENSIVE CODING
+            if fundamentals and isinstance(fundamentals, dict):
+                raw_sector = fundamentals.get('sector')
+                industry = fundamentals.get('industry')
+            else:
+                raw_sector = None
+                industry = None
             
-            # Normalize sector name - this will be done in get_sector_peers too, but we need it for display
+            # Defaults
+            if not raw_sector:
+                raw_sector = 'Technology'
+            if not industry:
+                industry = 'N/A'
+            
+            # Normalize sector name BEFORE display
             sector_mapping = {
                 'Health Care': 'Healthcare',
                 'Financial': 'Financials',
@@ -4136,7 +4146,7 @@ if analyze_btn:
                             {fundamentals.get('company_name', ticker) if fundamentals else ticker}
                         </p>
                         <p style="color: {COLOR_ACCENT_1}; margin: 0.75rem 0 0 0; font-size: 1.1rem; font-weight: 600;">
-                            {sector} • {fundamentals.get('industry', 'N/A') if fundamentals else 'N/A'}
+                            {sector} • {industry}
                         </p>
                     </div>
                     """, unsafe_allow_html=True)
@@ -4276,9 +4286,10 @@ if analyze_btn:
                 # STRATEGIC PARTNERSHIPS
                 st.markdown(f'<div style="color: {COLOR_MAIN_TEXT}; font-weight: 600; font-size: 1.1rem; margin: 1.5rem 0 0.75rem 0;">Competitive Ecosystem</div>', unsafe_allow_html=True)
                 
-                # Company context for competitive positioning
-                company_sector = fundamentals.get('sector', 'N/A') if fundamentals else 'N/A'
-                company_industry = fundamentals.get('industry', 'N/A') if fundamentals else 'N/A'
+                # Use the normalized sector and industry from earlier (lines 4088-4115)
+                # These are already extracted and normalized
+                company_sector = sector  # Use normalized sector, not raw fundamentals.get()
+                company_industry = industry  # Use industry extracted earlier
                 
                 if peers and len(peers) > 0:
                     peers_text = ", ".join(peers[:8])  # Top 8 peers
