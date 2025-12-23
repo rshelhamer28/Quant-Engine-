@@ -1871,8 +1871,8 @@ def _validate_numeric_value(
         logger.warning(f"Cannot convert {name}={value} to float")
         return None
 
-def get_fundamental_data(ticker, max_retries=5, initial_backoff=0.5):
-    """Fetch fundamental data for ANY US stock/ETF/index with selective rate limit retry"""
+def get_fundamental_data(ticker, max_retries=10, initial_backoff=0.5):
+    """Fetch fundamental data for ANY US stock/ETF/index with aggressive retry"""
     import random
     
     # Initialize result dict with all expected fields
@@ -1919,9 +1919,9 @@ def get_fundamental_data(ticker, max_retries=5, initial_backoff=0.5):
             
             if is_rate_limit and attempt < max_retries - 1:
                 # Rate limit detected - wait and retry
-                # Sleep: 0.5s → 1s → 2s → 4s → 8s
-                backoff_time = initial_backoff * (2 ** attempt) + random.uniform(0, 0.5)
-                logger.warning(f"Rate limit on attempt {attempt + 1} for {ticker}. Retrying in {backoff_time:.1f}s...")
+                # Sleep: 0.5s → 1s → 2s → 4s → 8s → 16s → 32s → 60s → 60s → 60s
+                backoff_time = min(initial_backoff * (2 ** attempt) + random.uniform(0, 0.5), 60)
+                logger.warning(f"Rate limit on attempt {attempt + 1}/{max_retries} for {ticker}. Retrying in {backoff_time:.1f}s...")
                 time.sleep(backoff_time)
             elif not is_rate_limit and attempt < max_retries - 1:
                 # Other error - quick retry without long sleep
@@ -2072,11 +2072,24 @@ def get_fundamental_data(ticker, max_retries=5, initial_backoff=0.5):
             logger.error(f"Error processing fundamental data for {ticker}: {str(e)[:100]}")
             # Fall through to final defaults
     
-    # Step 3: Final fallback - when ALL retries exhausted (should be rare)
+    # Step 3: Final fallback - when ALL retries exhausted
     logger.warning(f"Using fallback for {ticker} after all retries exhausted")
-    result['sector'] = 'Unknown'
+    
+    # Try to infer sector from ticker if we have price data
+    ticker_sector_map = {
+        'MSFT': 'Technology', 'AAPL': 'Technology', 'GOOGL': 'Technology', 'AMZN': 'Consumer Cyclical',
+        'NVDA': 'Technology', 'META': 'Technology', 'TSLA': 'Consumer Cyclical', 'JPM': 'Financials',
+        'JNJ': 'Healthcare', 'PG': 'Consumer Defensive', 'KO': 'Consumer Defensive', 'MCD': 'Consumer Cyclical',
+        'MDT': 'Healthcare', 'UNH': 'Healthcare', 'WMT': 'Consumer Defensive', 'HD': 'Consumer Cyclical',
+        'DIS': 'Communication Services', 'NFLX': 'Communication Services', 'BABA': 'Consumer Cyclical'
+    }
+    
+    # Set sector from map if available, otherwise Unknown
+    result['sector'] = ticker_sector_map.get(ticker.upper(), 'Unknown')
     result['industry'] = 'Unknown'
     result['partial_data'] = True
+    
+    logger.warning(f"Set sector for {ticker} to fallback: {result['sector']}")
     
     return result
 
@@ -4243,32 +4256,26 @@ if analyze_btn:
             # =================================================================
             with tab1:
                 st.markdown(f'<div style="text-align: right; font-size: 0.8rem; color: {COLOR_TERTIARY_TEXT}; margin-bottom: 1rem;">Analysis snapshot: {timestamp_str} (live market data with 15min yfinance delay)</div>', unsafe_allow_html=True)
-                # Company Header with Sector/Industry
-                col_header1, col_header2, col_header3 = st.columns([2, 1, 1])
-                
-                with col_header1:
-                    st.markdown(f"""
-                    <div style="margin-bottom: 1.5rem;">
-                        <h1 style="color: {COLOR_MAIN_TEXT}; margin: 0; font-size: 2.5rem; font-weight: 700;">{ticker}</h1>
-                        <p style="color: {COLOR_SECONDARY_TEXT}; margin: 0.5rem 0 0 0; font-size: 1rem; font-weight: 500;">
-                            {fundamentals.get('company_name', ticker) if fundamentals else ticker}
-                        </p>
-                        <p style="color: {COLOR_ACCENT_1}; margin: 0.75rem 0 0 0; font-size: 1.1rem; font-weight: 600;">
-                            {sector} • {industry}
-                        </p>
+                # Company Header with Sector/Industry - ONE BOX DESIGN
+                st.markdown(f"""
+                <div style="background: linear-gradient(135deg, rgba(52, 152, 219, 0.1), rgba(155, 89, 182, 0.1)); border-radius: 8px; padding: 1.75rem; border: 1px solid rgba(52, 152, 219, 0.2); margin-bottom: 1.5rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                        <div>
+                            <h1 style="color: {COLOR_MAIN_TEXT}; margin: 0; font-size: 2.5rem; font-weight: 700;">{ticker}</h1>
+                            <p style="color: {COLOR_SECONDARY_TEXT}; margin: 0.5rem 0 0 0; font-size: 1rem; font-weight: 500;">
+                                {fundamentals.get('company_name', ticker) if fundamentals else ticker}
+                            </p>
+                            <p style="color: {COLOR_ACCENT_1}; margin: 0.75rem 0 0 0; font-size: 1.1rem; font-weight: 600;">
+                                {sector} • {industry}
+                            </p>
+                        </div>
+                        <div style="text-align: right; min-width: 200px;">
+                            <div style="font-size: 0.9rem; color: {COLOR_SECONDARY_TEXT}; margin-bottom: 0.5rem;">Current Price</div>
+                            <div style="font-size: 2.5rem; font-weight: 700; color: {COLOR_ACCENT_1};">${current_price:,.2f}</div>
+                        </div>
                     </div>
-                    """, unsafe_allow_html=True)
-                
-                with col_header2:
-                    pass  # Spacer
-                
-                with col_header3:
-                    st.markdown(f"""
-                    <div style="text-align: right;">
-                        <div style="font-size: 0.9rem; color: {COLOR_SECONDARY_TEXT}; margin-bottom: 0.25rem;">Current Price</div>
-                        <div style="font-size: 2rem; font-weight: 700; color: {COLOR_ACCENT_1};">${current_price:,.2f}</div>
-                    </div>
-                    """, unsafe_allow_html=True)
+                </div>
+                """, unsafe_allow_html=True)
                 
                 st.markdown(f"""
                 <div style="background: linear-gradient(135deg, rgba(155, 89, 182, 0.15), rgba(52, 152, 219, 0.15)); border-radius: 8px; padding: 1.5rem; border: 1px solid rgba(155, 89, 182, 0.3);">
