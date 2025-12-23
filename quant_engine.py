@@ -1871,8 +1871,8 @@ def _validate_numeric_value(
         logger.warning(f"Cannot convert {name}={value} to float")
         return None
 
-def get_fundamental_data(ticker, max_retries=10, initial_backoff=0.5):
-    """Fetch fundamental data for ANY US stock/ETF/index with aggressive retry"""
+def get_fundamental_data(ticker, max_retries=5, initial_backoff=0.3):
+    """Fetch fundamental data for ANY US stock/ETF/index with selective retry"""
     import random
     
     # Initialize result dict with all expected fields
@@ -1919,8 +1919,8 @@ def get_fundamental_data(ticker, max_retries=10, initial_backoff=0.5):
             
             if is_rate_limit and attempt < max_retries - 1:
                 # Rate limit detected - wait and retry
-                # Sleep: 0.5s → 1s → 2s → 4s → 8s → 16s → 32s → 60s → 60s → 60s
-                backoff_time = min(initial_backoff * (2 ** attempt) + random.uniform(0, 0.5), 60)
+                # Sleep: 0.3s → 0.6s → 1.2s → 2.4s → 4.8s (max 15s)
+                backoff_time = min(initial_backoff * (2 ** attempt) + random.uniform(0, 0.3), 15)
                 logger.warning(f"Rate limit on attempt {attempt + 1}/{max_retries} for {ticker}. Retrying in {backoff_time:.1f}s...")
                 time.sleep(backoff_time)
             elif not is_rate_limit and attempt < max_retries - 1:
@@ -4258,7 +4258,7 @@ if analyze_btn:
                 st.markdown(f'<div style="text-align: right; font-size: 0.8rem; color: {COLOR_TERTIARY_TEXT}; margin-bottom: 1rem;">Analysis snapshot: {timestamp_str} (live market data with 15min yfinance delay)</div>', unsafe_allow_html=True)
                 # Company Header with Sector/Industry - ONE BOX DESIGN
                 st.markdown(f"""
-                <div style="background: linear-gradient(135deg, rgba(52, 152, 219, 0.1), rgba(155, 89, 182, 0.1)); border-radius: 8px; padding: 1.75rem; border: 1px solid rgba(52, 152, 219, 0.2); margin-bottom: 1.5rem;">
+                <div style="padding: 1.5rem 0; margin-bottom: 1.5rem;">
                     <div style="display: flex; justify-content: space-between; align-items: flex-start;">
                         <div>
                             <h1 style="color: {COLOR_MAIN_TEXT}; margin: 0; font-size: 2.5rem; font-weight: 700;">{ticker}</h1>
