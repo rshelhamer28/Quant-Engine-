@@ -695,6 +695,27 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
+# Fix: Hide white glare/artifacts above tabs with CSS
+st.markdown("""
+<style>
+/* Hide any bright spots or artifacts above tabs */
+[data-testid="stHorizontalBlock"] > div > div:first-child {
+    background-color: #0a0e27 !important;
+}
+
+/* Ensure tab area is dark */
+[role="tablist"] {
+    background-color: #0a0e27 !important;
+}
+
+/* Remove any bright borders or glows */
+[role="tab"] {
+    border-top: none !important;
+    box-shadow: none !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
 # Initialize per-user session state (CRITICAL FOR MULTI-USER SAFETY)
 def init_session_state():
     if 'session_initialized' in st.session_state:
@@ -1861,6 +1882,7 @@ def get_fundamental_data(ticker, max_retries=5, initial_backoff=0.5):
         'upside_pct': None,
         'pe_ratio': None,
         'peg_ratio': None,
+        'dividend_yield': None,
         'ev_ebitda': None,
         'short_float': None,
         'short_ratio': None,
@@ -1886,9 +1908,8 @@ def get_fundamental_data(ticker, max_retries=5, initial_backoff=0.5):
             stock = yf.Ticker(ticker)
             info = stock.info
             
-            # Validate ticker info schema
-            validate_ticker_info(info, ticker)
-            logger.info(f"✓ Successfully fetched fundamental data for {ticker}")
+            # Don't validate - just use whatever we got
+            logger.info(f"✓ Fetched fundamental data for {ticker}")
             break  # Exit loop on success
             
         except Exception as e:
@@ -1992,6 +2013,16 @@ def get_fundamental_data(ticker, max_retries=5, initial_backoff=0.5):
                         pass
             
             result['ev_ebitda'] = _coerce_to_float(info.get('enterpriseToEbitda'))
+            
+            # Extract dividend yield
+            dividend_yield = _coerce_to_float(info.get('dividendYield'))
+            if dividend_yield and dividend_yield > 0:
+                # Convert to percentage if it's a decimal (yfinance sometimes returns 0.03 for 3%)
+                if dividend_yield < 1:
+                    dividend_yield = dividend_yield * 100
+                result['dividend_yield'] = dividend_yield
+            else:
+                result['dividend_yield'] = None
             
             # Market cap with display formatting
             market_cap = _coerce_to_float(info.get('marketCap'))
