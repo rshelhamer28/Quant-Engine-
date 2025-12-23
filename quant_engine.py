@@ -4238,30 +4238,40 @@ st.markdown("""
         border: none !important;
         box-shadow: none !important;
     }
-    /* Number input +/- buttons - same color as text */
+    /* Number input +/- buttons - BLACK color to match input */
     [data-testid="stNumberInput"] button,
     .stNumberInput button,
     [data-testid="stNumberInput-StepUp"],
     [data-testid="stNumberInput-StepDown"],
     button[kind="secondary"] {
         background-color: transparent !important;
+        background: transparent !important;
         border: none !important;
         box-shadow: none !important;
-        color: #FFFFFF !important;
+        color: #000000 !important;
     }
     [data-testid="stNumberInput"] button svg,
     .stNumberInput button svg,
     [data-testid="stNumberInput-StepUp"] svg,
     [data-testid="stNumberInput-StepDown"] svg {
-        fill: #FFFFFF !important;
-        stroke: #FFFFFF !important;
-        color: #FFFFFF !important;
+        fill: #000000 !important;
+        stroke: #000000 !important;
+        color: #000000 !important;
     }
-    /* Number input wrapper - keep everything inline */
-    [data-testid="stNumberInput"] > div {
+    /* Number input wrapper - keep everything inline as ONE box */
+    [data-testid="stNumberInput"] > div,
+    .stNumberInput > div {
         display: flex !important;
         align-items: center !important;
         gap: 0 !important;
+        background: transparent !important;
+    }
+    /* Target the actual input container to be unified */
+    [data-testid="stNumberInput"] input,
+    .stNumberInput input {
+        background-color: rgba(255, 255, 255, 0.05) !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        border-radius: 4px !important;
     }
     /* Remove any separator/divider styling on step buttons */
     [data-testid="stNumberInput"] button::before,
