@@ -2806,6 +2806,27 @@ def get_sector_peers(ticker, sector):
     # Normalize sector name (handle variations)
     sector = sector.strip() if sector else 'Technology'
     
+    # Map various sector naming conventions to standard names
+    sector_name_mapping = {
+        'Technology': 'Technology',
+        'Healthcare': 'Healthcare',
+        'Health Care': 'Healthcare',
+        'Financials': 'Financials',
+        'Financial': 'Financials',
+        'Industrials': 'Industrials',
+        'Industrial': 'Industrials',
+        'Consumer Discretionary': 'Consumer Discretionary',
+        'Consumer Staples': 'Consumer Staples',
+        'Energy': 'Energy',
+        'Materials': 'Materials',
+        'Real Estate': 'Real Estate',
+        'Utilities': 'Utilities',
+        'Communication Services': 'Communication Services'
+    }
+    
+    # Normalize sector
+    sector = sector_name_mapping.get(sector, sector)
+    
     # Enhanced sector mapping with partnership relationships
     sector_data = {
         'Technology': {
@@ -2819,21 +2840,16 @@ def get_sector_peers(ticker, sector):
             }
         },
         'Healthcare': {
-            'peers': ['JNJ', 'PFE', 'MRK', 'ABT', 'UNH', 'LLY', 'TMO', 'DHR', 'BMY'],
+            'peers': ['JNJ', 'PFE', 'MRK', 'ABT', 'UNH', 'LLY', 'TMO', 'DHR', 'BMY', 'MDT', 'CNC', 'ISRG'],
             'partnerships': {
                 'JNJ': ['PFE', 'MRK', 'ABT', 'BMY', 'LLY'],
                 'PFE': ['BMY', 'JNJ', 'MRK', 'ABT', 'NVS'],
-                'UNH': ['CVS', 'ANTM', 'CI', 'HUM', 'ELV']
+                'UNH': ['CVS', 'ANTM', 'CI', 'HUM', 'ELV'],
+                'MDT': ['JNJ', 'ABT', 'SYK', 'BSX', 'ISRG'],
+                'ABT': ['JNJ', 'PFE', 'TMO', 'DHR', 'MRK']
             }
         },
         'Financials': {
-            'peers': ['JPM', 'BAC', 'WFC', 'GS', 'MS', 'C', 'BLK', 'SCHW', 'AXP'],
-            'partnerships': {
-                'JPM': ['BAC', 'C', 'WFC', 'GS', 'MS'],
-                'GS': ['MS', 'JPM', 'BLK', 'SCHW', 'BX']
-            }
-        },
-        'Financial': {
             'peers': ['JPM', 'BAC', 'WFC', 'GS', 'MS', 'C', 'BLK', 'SCHW', 'AXP'],
             'partnerships': {
                 'JPM': ['BAC', 'C', 'WFC', 'GS', 'MS'],
