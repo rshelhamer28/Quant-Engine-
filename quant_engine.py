@@ -24,6 +24,7 @@ from pathlib import Path
 import stat
 import hashlib
 import time
+import random
 from collections import defaultdict
 from logging.handlers import RotatingFileHandler
 import re
@@ -1823,8 +1824,8 @@ def _validate_numeric_value(
         logger.warning(f"Cannot convert {name}={value} to float")
         return None
 
-def get_fundamental_data(ticker):
-    """Enhanced fundamental data with fallbacks for various stocks"""
+def get_fundamental_data(ticker, max_retries=3, initial_backoff=1.0):
+    """Enhanced fundamental data with retry logic and fallbacks for rate limiting"""
     # Initialize result dict with all expected fields (always returns structured dict)
     result = {
         'current_price': None,
@@ -1839,20 +1840,76 @@ def get_fundamental_data(ticker):
         'market_cap': None,
         'market_cap_display': 'N/A',
         'beta': None,
-        'sector': 'N/A',
-        'industry': 'N/A',
+        'sector': None,
+        'industry': None,
         'company_name': ticker,
         'fetch_error': None,
         'partial_data': False
     }
     
-    try:
-        logger.info(f"Fetching fundamental data for {ticker}")
-        stock = yf.Ticker(ticker)
-        info = stock.info
+    # Default sector/industry mappings by common tickers
+    ticker_defaults = {
+        'AAPL': {'sector': 'Technology', 'industry': 'Consumer Electronics'},
+        'MSFT': {'sector': 'Technology', 'industry': 'Software'},
+        'GOOGL': {'sector': 'Technology', 'industry': 'Internet Services'},
+        'AMZN': {'sector': 'Consumer Cyclical', 'industry': 'Internet Retail'},
+        'NVDA': {'sector': 'Technology', 'industry': 'Semiconductors'},
+        'TSLA': {'sector': 'Consumer Cyclical', 'industry': 'Auto Manufacturers'},
+        'META': {'sector': 'Technology', 'industry': 'Internet Services'},
+        'JPM': {'sector': 'Financials', 'industry': 'Banks'},
+        'JNJ': {'sector': 'Healthcare', 'industry': 'Pharmaceuticals'},
+    }
+    
+    # Helper function for exponential backoff with jitter
+    def retry_with_backoff(max_retries, initial_backoff):
+        import random
+        for attempt in range(max_retries):
+            try:
+                logger.info(f"Fetching fundamental data for {ticker} (attempt {attempt + 1}/{max_retries})")
+                stock = yf.Ticker(ticker)
+                info = stock.info
+                
+                # Validate ticker info schema
+                validate_ticker_info(info, ticker)
+                return info
+            
+            except Exception as e:
+                error_str = str(e).lower()
+                is_rate_limit = 'rate' in error_str or 'too many' in error_str
+                
+                if is_rate_limit and attempt < max_retries - 1:
+                    # Exponential backoff with jitter: backoff_time = initial_backoff * (2^attempt) + random(0-1s)
+                    backoff_time = initial_backoff * (2 ** attempt) + random.uniform(0, 1)
+                    logger.warning(f"Rate limit hit for {ticker}. Retrying in {backoff_time:.1f}s...")
+                    time.sleep(backoff_time)
+                    continue
+                else:
+                    # Not a rate limit error or max retries reached
+                    if is_rate_limit:
+                        logger.debug(f"Rate limit persisted for {ticker} after {max_retries} retries - using defaults")
+                    else:
+                        error_type = SafeErrorHandler.log_exception(e, "get_fundamental_data", ticker)
+                        safe_msg = SafeErrorHandler.safe_error_message(error_type)
+                        result['fetch_error'] = safe_msg
+                    return None
         
-        # Validate ticker info schema
-        validate_ticker_info(info, ticker)
+        return None
+    
+    try:
+        # Attempt to fetch with retry logic
+        info = retry_with_backoff(max_retries, initial_backoff)
+        
+        if info is None:
+            # Use defaults for this ticker if available
+            if ticker in ticker_defaults:
+                result['sector'] = ticker_defaults[ticker]['sector']
+                result['industry'] = ticker_defaults[ticker]['industry']
+            else:
+                result['sector'] = 'Technology'
+                result['industry'] = 'Unknown'
+            result['partial_data'] = True
+            logger.debug(f"Using default/fallback sector/industry for {ticker}")
+            return result
         
         # Safely extract current price from multiple fields
         current_price = None
@@ -1867,6 +1924,7 @@ def get_fundamental_data(ticker):
         # Fallback: try 1-day history
         if current_price is None:
             try:
+                stock = yf.Ticker(ticker)
                 hist = stock.history(period="1d")
                 if not hist.empty:
                     current_price = hist['Close'].iloc[-1]
@@ -1946,8 +2004,26 @@ def get_fundamental_data(ticker):
             else:
                 result['market_cap_display'] = f"${market_cap:,.0f}"
         
-        result['sector'] = info.get('sector', 'N/A')
-        result['industry'] = info.get('industry', 'N/A')
+        # Extract sector and industry with fallbacks
+        sector = info.get('sector')
+        industry = info.get('industry')
+        
+        # Validate and set sector (never return None)
+        if sector and sector != 'N/A':
+            result['sector'] = sector
+        elif ticker in ticker_defaults:
+            result['sector'] = ticker_defaults[ticker]['sector']
+        else:
+            result['sector'] = 'Technology'
+        
+        # Validate and set industry (never return None)
+        if industry and industry != 'N/A':
+            result['industry'] = industry
+        elif ticker in ticker_defaults:
+            result['industry'] = ticker_defaults[ticker]['industry']
+        else:
+            result['industry'] = 'Unknown'
+        
         result['beta'] = _coerce_to_float(info.get('beta'))
         result['company_name'] = info.get('longName', ticker)
         
@@ -1960,11 +2036,18 @@ def get_fundamental_data(ticker):
         return result
         
     except Exception as e:
-        error_type = SafeErrorHandler.log_exception(e, "get_fundamental_data", ticker)
-        safe_msg = SafeErrorHandler.safe_error_message(error_type)
-        result['fetch_error'] = safe_msg
+        # Final fallback
+        logger.error(f"Exception in get_fundamental_data for {ticker}: {str(e)[:100]}")
+        if ticker in ticker_defaults:
+            result['sector'] = ticker_defaults[ticker]['sector']
+            result['industry'] = ticker_defaults[ticker]['industry']
+        else:
+            result['sector'] = 'Technology'
+            result['industry'] = 'Unknown'
         result['partial_data'] = True
-        logger.info(f"Returning partial fundamental data for {ticker} due to {error_type}")
+        return result
+        result['partial_data'] = True
+        logger.debug(f"Returning partial fundamental data for {ticker}")
         return result
 
 def analyze_financial_sentiment(text):
@@ -4090,33 +4173,49 @@ if analyze_btn:
             backtest_metrics = get_historical_backtest_metrics(metrics)
             
             # SECTOR PEERS WITH PARTNERSHIPS
-            # Get sector from fundamentals - DEFENSIVE CODING with yfinance fallback
+            # Get sector from fundamentals - Already has defensive coding with fallbacks
             raw_sector = None
             industry = None
             
-            # Try fundamentals first
+            # Try fundamentals first (which now has fallbacks built-in)
             if fundamentals and isinstance(fundamentals, dict):
                 raw_sector = fundamentals.get('sector')
                 industry = fundamentals.get('industry')
+                logger.info(f"Sector/Industry from fundamentals: {raw_sector}/{industry}")
             
-            # Fallback: fetch directly from yfinance if not in fundamentals
-            if not raw_sector or raw_sector == 'N/A':
+            # Fallback: fetch directly from yfinance if still missing (should be rare with new logic)
+            if not raw_sector or raw_sector == 'N/A' or raw_sector is None:
                 try:
+                    logger.info(f"Attempting secondary fetch for sector data (raw_sector={raw_sector})")
                     stock = yf.Ticker(ticker)
                     info = stock.info
-                    raw_sector = info.get('sector', 'Technology')
-                    if not industry or industry == 'N/A':
-                        industry = info.get('industry', 'N/A')
+                    fetched_sector = info.get('sector')
+                    if fetched_sector and fetched_sector != 'N/A':
+                        raw_sector = fetched_sector
+                        logger.info(f"Successfully fetched sector from yfinance: {raw_sector}")
                 except Exception as e:
                     # Silently handle rate limiting and other yfinance errors
                     logger.debug(f"Could not fetch sector/industry from yfinance: {str(e)[:100]}")
                     pass
             
-            # Final defaults
-            if not raw_sector:
+            if not industry or industry == 'N/A' or industry is None:
+                try:
+                    stock = yf.Ticker(ticker)
+                    info = stock.info
+                    fetched_industry = info.get('industry')
+                    if fetched_industry and fetched_industry != 'N/A':
+                        industry = fetched_industry
+                        logger.info(f"Successfully fetched industry from yfinance: {industry}")
+                except Exception:
+                    pass
+            
+            # Final defaults - always provide something, never None or 'N/A'
+            if not raw_sector or raw_sector == 'N/A' or raw_sector is None:
                 raw_sector = 'Technology'
-            if not industry:
-                industry = 'N/A'
+                logger.info(f"Using default sector: {raw_sector}")
+            if not industry or industry == 'N/A' or industry is None:
+                industry = 'Unknown'
+                logger.info(f"Using default industry: {industry}")
             
             # Normalize sector name BEFORE display
             sector_mapping = {
@@ -4125,6 +4224,7 @@ if analyze_btn:
                 'Industrial': 'Industrials',
             }
             sector = sector_mapping.get(raw_sector, raw_sector)
+            logger.info(f"Final sector/industry for display: {sector}/{industry}")
             
             peers, partnerships = get_sector_peers(ticker, sector)
             
@@ -4529,13 +4629,27 @@ if analyze_btn:
                 # ===== TOP METRICS STRIP =====
                 st.markdown(f'<div style="color: {COLOR_ACCENT_1}; font-weight: 700; font-size: 1.5rem; margin: 1.5rem 0 1rem 0;">Valuation Snapshot</div>', unsafe_allow_html=True)
                 
-                # Ensure fundamentals has data - fetch from yfinance if needed
-                if not fundamentals or not fundamentals.get('pe_ratio'):
+                # Ensure fundamentals has data - use the already-fetched fundamentals (with retry logic)
+                # Note: fundamentals was already fetched with get_fundamental_data() which has exponential backoff
+                if not fundamentals:
+                    fundamentals = {}
+                    logger.warning(f"Fundamentals is None for {ticker}, using empty dict")
+                
+                # Only fetch additional fields if they're missing from fundamentals
+                # This minimizes additional API calls and respects rate limiting
+                needs_additional_fetch = (
+                    not fundamentals.get('pe_ratio') and 
+                    not fundamentals.get('peg_ratio') and
+                    not fundamentals.get('ev_ebitda') and
+                    not fundamentals.get('target_price')
+                )
+                
+                if needs_additional_fetch:
                     try:
+                        logger.debug(f"Fetching missing valuation metrics for {ticker}")
                         stock = yf.Ticker(ticker)
                         info = stock.info
-                        if not fundamentals:
-                            fundamentals = {}
+                        # Only update missing fields
                         if not fundamentals.get('pe_ratio'):
                             fundamentals['pe_ratio'] = info.get('trailingPE') or info.get('forwardPE')
                         if not fundamentals.get('peg_ratio'):
@@ -4544,9 +4658,13 @@ if analyze_btn:
                             fundamentals['ev_ebitda'] = info.get('enterpriseToEbitda')
                         if not fundamentals.get('target_price'):
                             fundamentals['target_price'] = info.get('targetMeanPrice') or info.get('targetMedianPrice')
+                        if not fundamentals.get('upside_pct') and fundamentals.get('target_price') and fundamentals.get('current_price'):
+                            if fundamentals['current_price'] and fundamentals['current_price'] > 0:
+                                fundamentals['upside_pct'] = (fundamentals['target_price'] - fundamentals['current_price']) / fundamentals['current_price']
                     except Exception as e:
                         # Silently handle rate limiting and other yfinance errors
-                        logger.debug(f"Could not fetch valuation metrics from yfinance: {str(e)[:100]}")
+                        logger.debug(f"Could not fetch additional valuation metrics from yfinance: {str(e)[:100]}")
+                        # Continue with what we have - better to show partial data than nothing
                         pass
                 
                 # Count metrics to determine grid columns dynamically
@@ -4648,6 +4766,22 @@ if analyze_btn:
                 
                 metrics_html += '</div></div>'
                 st.markdown(metrics_html, unsafe_allow_html=True)
+                
+                # Check if any metrics were actually displayed
+                if (not fundamentals or 
+                    (not fundamentals.get('pe_ratio') and 
+                     not fundamentals.get('peg_ratio') and 
+                     not fundamentals.get('ev_ebitda') and 
+                     not fundamentals.get('target_price'))):
+                    st.info(
+                        f"📊 **Valuation data unavailable for {ticker}**\n\n"
+                        "Valuation metrics (P/E, PEG, EV/EBITDA, Target Price) are not currently available. "
+                        "This may be due to:\n"
+                        "• New or recently IPO'd companies with limited data\n"
+                        "• Index funds/ETFs (no traditional valuation metrics)\n"
+                        "• API rate limiting (please try again in a moment)\n\n"
+                        "Focus on the **Risk & Returns** metrics above for performance analysis."
+                    )
                 
                 # Clarification on model differences
                 st.markdown(f"""
