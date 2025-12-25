@@ -713,6 +713,32 @@ st.markdown("""
     border-top: none !important;
     box-shadow: none !important;
 }
+
+/* Remove white line/glare above tab panels */
+[data-baseweb="tab-panel"],
+.stTabs > div:last-child,
+[role="tabpanel"] {
+    border-top: none !important;
+    box-shadow: none !important;
+    background-color: transparent !important;
+}
+
+/* Remove any highlight from tab border */
+[data-baseweb="tab-border"],
+[data-baseweb="tab-highlight"] {
+    display: none !important;
+    background-color: transparent !important;
+}
+
+/* Ensure tab container has no white edges */
+.stTabs {
+    background-color: transparent !important;
+}
+
+.stTabs > div {
+    background-color: transparent !important;
+    border: none !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -2827,10 +2853,10 @@ def get_dashboard_signal_and_risk(conviction_score, metrics):
     # Use the same signal logic as get_conviction_signal
     signal_text, signal_color, _ = get_conviction_signal(conviction_score, metrics)
     
-    # Map signal text to display (no emojis for cleaner look)
+    # Map signal text to display - preserve STRONG BUY distinction
     if "STRONG BUY" in signal_text:
-        signal = "BUY"
-        signal_bg = "rgba(39, 174, 96, 0.1)"
+        signal = "STRONG BUY"
+        signal_bg = "rgba(39, 174, 96, 0.15)"
     elif "BUY" in signal_text:
         signal = "BUY"
         signal_bg = "rgba(39, 174, 96, 0.1)"
@@ -6362,18 +6388,24 @@ if analyze_btn:
                     """, unsafe_allow_html=True)
                 
                 with timeline_col2:
-                    # Risk spectrum - use the same risk_level determination as the dashboard card
+                    # Risk spectrum - use the SAME risk_level determination as get_dashboard_signal_and_risk
                     max_drawdown = metrics.get('max_drawdown', 0)
+                    sharpe = metrics.get('sharpe', 0)
                     
                     # Determine spectrum color and position based on risk classification
+                    # MUST MATCH get_dashboard_signal_and_risk logic exactly
                     if annual_vol < 0.20 and max_drawdown > -0.20:
                         spectrum_risk_text = "Low Risk"
                         spectrum_color_left = COLOR_POSITIVE
                         risk_position = 20  # Position at low end
-                    elif annual_vol < 0.30 and max_drawdown > -0.30:
+                    elif annual_vol < 0.25 and max_drawdown > -0.25 and sharpe > 0.5:
                         spectrum_risk_text = "Medium Risk"
                         spectrum_color_left = COLOR_WARNING
-                        risk_position = 50  # Position at middle
+                        risk_position = 40  # Position at medium-low
+                    elif annual_vol < 0.35 and max_drawdown > -0.35 and sharpe > -0.2:
+                        spectrum_risk_text = "Moderate-High Risk"
+                        spectrum_color_left = COLOR_WARNING
+                        risk_position = 60  # Position at moderate-high
                     else:
                         spectrum_risk_text = "High Risk"
                         spectrum_color_left = COLOR_NEGATIVE
